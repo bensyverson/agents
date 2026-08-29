@@ -1,0 +1,10 @@
+modules:
+  - core
+  - principles
+  - stage-build
+  - go
+  - jobs-brief
+  - jobs
+  - harness-brief
+  - harness
+  - background
