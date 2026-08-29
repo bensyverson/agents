@@ -5,8 +5,12 @@ You are working on `agents`, a small Go CLI that renders shared house rules (the
 ## Documentation
 
 - [README.md](README.md) — what the tool is and how to start; [DOCS.md](DOCS.md) — the marker convention, module format and every verb
-- [project/](project/) — dated design documents; [project/2026-08-28-practice-plan.md](project/2026-08-28-practice-plan.md) is the current plan (umbrella `iZ7pQ`), [project/2026-08-28-practice-assessment.md](project/2026-08-28-practice-assessment.md) the assessment behind it, [project/2026-08-28-planning.md](project/2026-08-28-planning.md) how plans are written, [project/2026-08-16-plan.md](project/2026-08-16-plan.md) the v1 design
+- [project/](project/) — dated design documents; [project/2026-08-28-practice-plan.md](project/2026-08-28-practice-plan.md) is the current plan (umbrella `iZ7pQ`), [project/2026-08-28-practice-assessment.md](project/2026-08-28-practice-assessment.md) the assessment behind it, [project/2026-08-28-planning.md](project/2026-08-28-planning.md) how plans are written, [project/2026-08-16-plan.md](project/2026-08-16-plan.md) the v1 design, [project/2026-08-29-public-repo.md](project/2026-08-29-public-repo.md) the confidentiality ruling
 - [modules/](modules/) — the shared rules themselves; [templates/](templates/) — files seeded into managed repos
+
+## Confidentiality
+
+**This repo is public. Never name a managed repo, its client, or anything lifted from its content** — figures, filenames, quoted rulings — in plans, assessments, gotchas, tests or commit messages; refer to repos by pseudonym or by shape. Per-repo working notes go in `local/` (gitignored). Why: [project/2026-08-29-public-repo.md](project/2026-08-29-public-repo.md).
 
 This file is itself rendered from those modules by the tool (`agents sync` here must always be a no-op) — the regions below are what every managed repo receives.
 
