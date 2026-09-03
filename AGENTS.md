@@ -5,7 +5,7 @@ You are working on `agents`, a small Go CLI that renders shared house rules (the
 ## Documentation
 
 - [README.md](README.md) — what the tool is and how to start; [DOCS.md](DOCS.md) — the marker convention, module format and every verb
-- [project/](project/) — dated design documents; [project/2026-08-28-practice-plan.md](project/2026-08-28-practice-plan.md) is the current plan (umbrella `iZ7pQ`), [project/2026-08-28-practice-assessment.md](project/2026-08-28-practice-assessment.md) the assessment behind it, [project/2026-08-28-planning.md](project/2026-08-28-planning.md) how plans are written, [project/2026-08-16-plan.md](project/2026-08-16-plan.md) the v1 design, [project/2026-08-29-public-repo.md](project/2026-08-29-public-repo.md) the confidentiality ruling
+- [project/](project/) — dated design documents; [project/2026-09-03-sources-and-situations.md](project/2026-09-03-sources-and-situations.md) is the current plan (sources and situational modules, umbrella `hZ0UQe`), [project/2026-08-28-practice-plan.md](project/2026-08-28-practice-plan.md) the previous one (umbrella `iZ7pQ`), [project/2026-08-28-practice-assessment.md](project/2026-08-28-practice-assessment.md) the assessment behind it, [project/2026-08-28-planning.md](project/2026-08-28-planning.md) how plans are written, [project/2026-08-16-plan.md](project/2026-08-16-plan.md) the v1 design, [project/2026-08-29-public-repo.md](project/2026-08-29-public-repo.md) the confidentiality ruling
 - [modules/](modules/) — the shared rules themselves; [templates/](templates/) — files seeded into managed repos
 
 ## Confidentiality

@@ -48,7 +48,7 @@ func TestEmbeddedModuleHashes(t *testing.T) {
 		"stage-build": "3d5d83",
 		"go":          "91ab6a",
 		"delegation":  "722742",
-		"evidence":    "f7acd9",
+		"evidence":    "2393e6",
 	}
 	for name, wantHash := range want {
 		m, ok := set.Get(name)
