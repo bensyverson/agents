@@ -37,23 +37,28 @@ var (
 	ErrNotManaged = errors.New("not a managed repo")
 )
 
-// Repo is an open managed repo: its manifest resolved against a module set.
+// Repo is an open managed repo: its manifest, the sources it names, and the
+// modules those sources supply.
 type Repo struct {
 	Dir      string
-	Set      module.Set
 	Manifest manifest.Manifest
-	// Templates supplies the body of each seed a module declares, keyed by the
-	// seed's repo-relative path. Open leaves it nil, which turns seeding off;
-	// the verbs that may create files set it, the read-only ones do not.
-	Templates fs.FS
+	// Sources are the loaded sources, keyed by the name the manifest gives
+	// each. A module's seeds are read from the templates of the source that
+	// module came from, so two sources may seed different bodies for one path.
+	Sources Sources
+	// Seeds says whether Sync creates the files the modules declare. Open
+	// leaves it at SeedsSkipped; the verbs that may create files set it.
+	Seeds SeedPolicy
 
 	// mods is the manifest resolved to modules, in manifest order.
 	mods []module.Module
+	// origin maps an enabled module's name to the source it came from.
+	origin map[string]string
 }
 
-// Open reads dir's manifest and resolves it against set. It does not read any
-// rendered file; that is Targets' job.
-func Open(dir string, set module.Set) (*Repo, error) {
+// Open reads dir's manifest, loads the sources it names and resolves it
+// against them. It does not read any rendered file; that is Targets' job.
+func Open(dir string, opts Options) (*Repo, error) {
 	info, err := os.Stat(dir)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
@@ -75,11 +80,25 @@ func Open(dir string, set module.Set) (*Repo, error) {
 	if err != nil {
 		return nil, err
 	}
-	mods, err := manifest.Resolve(m, set)
+	sources, err := LoadSources(dir, m, opts)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", dir, err)
 	}
-	return &Repo{Dir: dir, Set: set, Manifest: m, mods: mods}, nil
+	mods, origin, err := sources.resolve(m)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", dir, err)
+	}
+	return &Repo{Dir: dir, Manifest: m, Sources: sources, mods: mods, origin: origin}, nil
+}
+
+// templatesFor is the templates of the source the named enabled module came
+// from — where its seeds are read, and nothing else.
+func (r *Repo) templatesFor(name string) fs.FS {
+	src, ok := r.Sources[r.origin[name]]
+	if !ok {
+		return nil
+	}
+	return src.Source.Templates
 }
 
 // Target is one file the tool renders: AGENTS.md, holding every inline module

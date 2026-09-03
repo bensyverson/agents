@@ -5,7 +5,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"testing/fstest"
 
 	agents "github.com/bensyverson/agents"
 	"github.com/bensyverson/agents/internal/manifest"
@@ -92,10 +91,15 @@ func TestSyncMissingTemplateIsAnError(t *testing.T) {
 		manifest.FileName: "modules:\n  - core\n",
 		AgentsFile:        fresh("core", coreBody),
 	})
-	r := mustOpen(t, dir)
-	r.Templates = fstest.MapFS{}
+	source := testSourceFS()
+	delete(source, "templates/"+GotchasFile)
+	r, err := Open(dir, Options{Embedded: source})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	r.Seeds = SeedsCreated
 
-	_, err := r.Sync(false)
+	_, err = r.Sync(false)
 	if err == nil {
 		t.Fatal("Sync = nil error, want one naming the missing template")
 	}
@@ -109,8 +113,9 @@ func TestSyncMissingTemplateIsAnError(t *testing.T) {
 	}
 }
 
-// Seeding is opt-in: a Repo opened without templates renders and nothing more.
-func TestSyncWithoutTemplatesSeedsNothing(t *testing.T) {
+// Seeding is opt-in: a Repo left at SeedsSkipped renders and nothing more,
+// which is what the read-only verbs open.
+func TestSyncWithSeedsSkippedSeedsNothing(t *testing.T) {
 	dir := newRepo(t, map[string]string{
 		manifest.FileName: "modules:\n  - core\n",
 		AgentsFile:        fresh("core", coreBody),
@@ -119,10 +124,10 @@ func TestSyncWithoutTemplatesSeedsNothing(t *testing.T) {
 	res := mustSync(t, mustOpen(t, dir), false)
 
 	if len(res.Seeded) != 0 {
-		t.Errorf("Seeded = %v, want nothing without a template FS", res.Seeded)
+		t.Errorf("Seeded = %v, want nothing with SeedsSkipped", res.Seeded)
 	}
 	if fileExists(t, dir, GotchasFile) {
-		t.Errorf("%s was created without a template FS", GotchasFile)
+		t.Errorf("%s was created with SeedsSkipped", GotchasFile)
 	}
 }
 

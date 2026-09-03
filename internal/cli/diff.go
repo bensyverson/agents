@@ -23,11 +23,11 @@ func diffCmd() *cobra.Command {
 			"Silent when there is nothing to review.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			set, err := moduleSet(cmd)
+			opts, err := openOptions(repo.FetchNever)
 			if err != nil {
 				return err
 			}
-			return forEachRepo(cmd, set, all, func(r *repo.Repo) error {
+			return forEachRepo(cmd, opts, all, func(r *repo.Repo) error {
 				rep, err := r.Diff()
 				if err != nil {
 					return err

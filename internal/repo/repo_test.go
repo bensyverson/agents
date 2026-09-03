@@ -16,18 +16,17 @@ const (
 )
 
 func TestOpenErrors(t *testing.T) {
-	set := testSet(t)
 
 	t.Run("missing directory", func(t *testing.T) {
 		dir := filepath.Join(t.TempDir(), "nope")
-		_, err := Open(dir, set)
+		_, err := Open(dir, testOptions())
 		if !errors.Is(err, ErrMissingDir) {
 			t.Fatalf("got %v, want ErrMissingDir", err)
 		}
 	})
 
 	t.Run("no manifest", func(t *testing.T) {
-		_, err := Open(t.TempDir(), set)
+		_, err := Open(t.TempDir(), testOptions())
 		if !errors.Is(err, ErrNotManaged) {
 			t.Fatalf("got %v, want ErrNotManaged", err)
 		}
@@ -35,7 +34,7 @@ func TestOpenErrors(t *testing.T) {
 
 	t.Run("unknown module", func(t *testing.T) {
 		dir := newRepo(t, map[string]string{manifest.FileName: "modules:\n  - core\n  - nope\n  - alsonope\n"})
-		_, err := Open(dir, set)
+		_, err := Open(dir, testOptions())
 		var unknown *manifest.UnknownModulesError
 		if !errors.As(err, &unknown) {
 			t.Fatalf("got %v, want *manifest.UnknownModulesError", err)
@@ -47,7 +46,7 @@ func TestOpenErrors(t *testing.T) {
 
 	t.Run("malformed manifest", func(t *testing.T) {
 		dir := newRepo(t, map[string]string{manifest.FileName: "modules: [\n"})
-		if _, err := Open(dir, set); err == nil {
+		if _, err := Open(dir, testOptions()); err == nil {
 			t.Fatal("want error on malformed manifest, got nil")
 		}
 	})

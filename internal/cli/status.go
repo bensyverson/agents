@@ -23,7 +23,7 @@ func statusCmd() *cobra.Command {
 			"was changed by hand since. A region can be both, and is counted in both.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			set, err := moduleSet(cmd)
+			opts, err := openOptions(repo.FetchNever)
 			if err != nil {
 				return err
 			}
@@ -33,7 +33,7 @@ func statusCmd() *cobra.Command {
 			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, statusPadding, ' ', 0)
 			for _, dir := range dirs {
-				r, err := repo.Open(dir, set)
+				r, err := repo.Open(dir, opts)
 				if err != nil {
 					// Without --all this is the user's mistake; with it, a
 					// registry entry that has rotted is still worth a line.

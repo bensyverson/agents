@@ -176,7 +176,7 @@ func TestDiffShowsAnEditedIndex(t *testing.T) {
 func TestIndexIsNotAManifestEntry(t *testing.T) {
 	dir := newRepo(t, map[string]string{manifest.FileName: "modules:\n  - core\n  - index\n"})
 
-	_, err := Open(dir, testSet(t))
+	_, err := Open(dir, testOptions())
 
 	var unknown *manifest.UnknownModulesError
 	if !errors.As(err, &unknown) {

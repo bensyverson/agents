@@ -6,14 +6,27 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/bensyverson/agents/internal/repo"
+	"github.com/bensyverson/agents/internal/source"
 )
 
 const (
 	coreBody       = "core rules\n"
 	principlesBody = "principles\n"
 	// coreModule is core as a file: the seed it declares is what makes init
-	// create project/gotchas.md, whose template ships in the binary.
+	// create project/gotchas.md from the source's own templates.
 	coreModule = "---\nseeds: [project/gotchas.md]\n---\n" + coreBody
+	// gotchasTemplate stands in for the real seed template; what matters is
+	// that it has a preamble above a rule line, so a reseed has work to do.
+	gotchasTemplate = "# Gotchas\n\nOne entry per trap.\n\n---\n"
+	// templatePreamble is everything above the template's first rule line:
+	// what a reseed installs.
+	templatePreamble = "# Gotchas\n\nOne entry per trap.\n"
+	headTemplate     = "# Project\n\nProject-owned rules go here.\n"
+	// sourceName is the last segment of the fixture source's directory, and so
+	// the name every manifest the fixture writes gives it.
+	sourceName = "house"
 )
 
 // run executes the command tree the way main does, with output captured.
@@ -28,26 +41,51 @@ func run(t *testing.T, args ...string) (stdout, stderr string, err error) {
 	return out.String(), errBuf.String(), err
 }
 
-// fixture makes a modules directory and an empty repo, chdirs into the repo and
-// points the registry at a temp file.
-func fixture(t *testing.T) (repoDir, modulesDir, registryPath string) {
+// writeSourceFile writes one file into a source directory.
+func writeSourceFile(t *testing.T, sourceDir, rel, body string) {
 	t.Helper()
-	modulesDir = t.TempDir()
-	for name, body := range map[string]string{"core.md": coreModule, "principles.md": principlesBody} {
-		if err := os.WriteFile(filepath.Join(modulesDir, name), []byte(body), 0o644); err != nil {
-			t.Fatalf("write %s: %v", name, err)
-		}
+	path := filepath.Join(sourceDir, filepath.FromSlash(rel))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir for %s: %v", rel, err)
 	}
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatalf("write %s: %v", rel, err)
+	}
+}
+
+// newSource builds a source directory — modules/ and templates/ at its root —
+// named so that the manifest entry it produces is predictable.
+func newSource(t *testing.T, name string, files map[string]string) string {
+	t.Helper()
+	dir := filepath.Join(t.TempDir(), name)
+	for rel, body := range files {
+		writeSourceFile(t, dir, rel, body)
+	}
+	return dir
+}
+
+// fixture makes a path source and an empty repo, chdirs into the repo, and
+// points both the registry and the source cache at temp files so no test can
+// reach the real ones.
+func fixture(t *testing.T) (repoDir, sourceDir, registryPath string) {
+	t.Helper()
+	sourceDir = newSource(t, sourceName, map[string]string{
+		"modules/core.md":                coreModule,
+		"modules/principles.md":          principlesBody,
+		"templates/project/gotchas.md":   gotchasTemplate,
+		"templates/" + repo.HeadTemplate: headTemplate,
+	})
 	repoDir = t.TempDir()
 	registryPath = filepath.Join(t.TempDir(), "repos")
 	t.Setenv(registryEnvVar, registryPath)
+	t.Setenv(source.CacheEnv, t.TempDir())
 	t.Chdir(repoDir)
-	return repoDir, modulesDir, registryPath
+	return repoDir, sourceDir, registryPath
 }
 
-func initRepo(t *testing.T, modulesDir string) {
+func initRepo(t *testing.T, sourceDir string) {
 	t.Helper()
-	stdout, stderr, err := run(t, "init", "--modules", modulesDir, "--with", "core,principles")
+	stdout, stderr, err := run(t, "init", "--source", sourceDir, "--with", "core,principles")
 	if err != nil {
 		t.Fatalf("init: %v (stderr %s)", err, stderr)
 	}
@@ -75,8 +113,8 @@ func handEdit(t *testing.T, repoDir string) {
 }
 
 func TestInitThenSyncStatusDiff(t *testing.T) {
-	repoDir, modulesDir, registryPath := fixture(t)
-	initRepo(t, modulesDir)
+	repoDir, sourceDir, registryPath := fixture(t)
+	initRepo(t, sourceDir)
 
 	if _, err := os.Stat(filepath.Join(repoDir, "AGENTS.md")); err != nil {
 		t.Fatalf("AGENTS.md: %v", err)
@@ -86,7 +124,7 @@ func TestInitThenSyncStatusDiff(t *testing.T) {
 	}
 
 	// Sync on a freshly initialised repo is silent.
-	stdout, _, err := run(t, "sync", "--modules", modulesDir)
+	stdout, _, err := run(t, "sync")
 	if err != nil {
 		t.Fatalf("sync: %v", err)
 	}
@@ -94,7 +132,7 @@ func TestInitThenSyncStatusDiff(t *testing.T) {
 		t.Errorf("sync printed %q, want silence", stdout)
 	}
 
-	stdout, _, err = run(t, "status", "--modules", modulesDir)
+	stdout, _, err = run(t, "status")
 	if err != nil {
 		t.Fatalf("status: %v", err)
 	}
@@ -112,7 +150,7 @@ func TestInitThenSyncStatusDiff(t *testing.T) {
 		t.Errorf("status printed more than one line:\n%s", stdout)
 	}
 
-	stdout, _, err = run(t, "diff", "--modules", modulesDir)
+	stdout, _, err = run(t, "diff")
 	if err != nil {
 		t.Fatalf("diff: %v", err)
 	}
@@ -122,11 +160,11 @@ func TestInitThenSyncStatusDiff(t *testing.T) {
 }
 
 func TestSyncRefusesHandEditThenForces(t *testing.T) {
-	repoDir, modulesDir, _ := fixture(t)
-	initRepo(t, modulesDir)
+	repoDir, sourceDir, _ := fixture(t)
+	initRepo(t, sourceDir)
 	handEdit(t, repoDir)
 
-	stdout, stderr, err := run(t, "sync", "--modules", modulesDir)
+	stdout, stderr, err := run(t, "sync")
 	if err == nil {
 		t.Fatal("sync returned nil error on a hand-edited region; the process would exit 0")
 	}
@@ -143,7 +181,7 @@ func TestSyncRefusesHandEditThenForces(t *testing.T) {
 		t.Errorf("refusal message printed twice:\nstdout %s\nstderr %s", stdout, stderr)
 	}
 
-	stdout, _, err = run(t, "sync", "--modules", modulesDir, "--force")
+	stdout, _, err = run(t, "sync", "--force")
 	if err != nil {
 		t.Fatalf("sync --force: %v", err)
 	}
@@ -157,15 +195,15 @@ func TestSyncRefusesHandEditThenForces(t *testing.T) {
 }
 
 func TestDiffShowsEditsAndRules(t *testing.T) {
-	repoDir, modulesDir, _ := fixture(t)
-	initRepo(t, modulesDir)
+	repoDir, sourceDir, _ := fixture(t)
+	initRepo(t, sourceDir)
 	handEdit(t, repoDir)
 	gotchas := "# Gotchas\n\n## 2026-07-01 — rule: the TDD rule is ambiguous\n\nfirst body line\nsecond body line\n"
 	if err := os.WriteFile(filepath.Join(repoDir, "project", "gotchas.md"), []byte(gotchas), 0o644); err != nil {
 		t.Fatalf("write gotchas: %v", err)
 	}
 
-	stdout, _, err := run(t, "diff", "--modules", modulesDir)
+	stdout, _, err := run(t, "diff")
 	if err != nil {
 		t.Fatalf("diff: %v", err)
 	}
@@ -179,13 +217,13 @@ func TestDiffShowsEditsAndRules(t *testing.T) {
 }
 
 func TestStatusAllWalksRegistry(t *testing.T) {
-	repoDir, modulesDir, registryPath := fixture(t)
-	initRepo(t, modulesDir)
+	repoDir, sourceDir, registryPath := fixture(t)
+	initRepo(t, sourceDir)
 	missing := filepath.Join(t.TempDir(), "gone")
 	unmanaged := t.TempDir()
 	appendRegistry(t, registryPath, missing, unmanaged)
 
-	stdout, _, err := run(t, "status", "--all", "--modules", modulesDir)
+	stdout, _, err := run(t, "status", "--all")
 	if err != nil {
 		t.Fatalf("status --all: %v", err)
 	}
@@ -205,13 +243,13 @@ func TestStatusAllWalksRegistry(t *testing.T) {
 }
 
 func TestDiffAllWarnsAndContinues(t *testing.T) {
-	repoDir, modulesDir, registryPath := fixture(t)
-	initRepo(t, modulesDir)
+	repoDir, sourceDir, registryPath := fixture(t)
+	initRepo(t, sourceDir)
 	handEdit(t, repoDir)
 	missing := filepath.Join(t.TempDir(), "gone")
 	appendRegistry(t, registryPath, missing)
 
-	stdout, stderr, err := run(t, "diff", "--all", "--modules", modulesDir)
+	stdout, stderr, err := run(t, "diff", "--all")
 	if err != nil {
 		t.Fatalf("diff --all: %v", err)
 	}
@@ -227,9 +265,9 @@ func TestDiffAllWarnsAndContinues(t *testing.T) {
 }
 
 func TestVerbsRefuseAnUnmanagedDirectory(t *testing.T) {
-	_, modulesDir, _ := fixture(t)
+	emptyRepo(t)
 	for _, verb := range []string{"sync", "diff", "status"} {
-		_, _, err := run(t, verb, "--modules", modulesDir)
+		_, _, err := run(t, verb)
 		if err == nil {
 			t.Errorf("%s in an unmanaged directory returned nil error", verb)
 			continue
@@ -269,11 +307,11 @@ func appendRegistry(t *testing.T, path string, repos ...string) {
 // init re-run over a repo whose regions were hand-edited must refuse the same
 // way sync does, rather than emit a bare error with no diff.
 func TestInitRefusesHandEditedRegions(t *testing.T) {
-	repoDir, modulesDir, _ := fixture(t)
-	initRepo(t, modulesDir)
+	repoDir, sourceDir, _ := fixture(t)
+	initRepo(t, sourceDir)
 	handEdit(t, repoDir)
 
-	stdout, _, err := run(t, "init", "--modules", modulesDir, "--with", "core,principles")
+	stdout, _, err := run(t, "init", "--with", "core,principles")
 	if err == nil {
 		t.Fatal("init returned nil error over a hand-edited region")
 	}
@@ -288,20 +326,20 @@ func TestInitRefusesHandEditedRegions(t *testing.T) {
 // A refusal in one repo must not stop the others: every repo is visited, each
 // refusal is printed under its path, and the exit is non-zero at the end.
 func TestSyncAllContinuesPastRefusal(t *testing.T) {
-	repoA, modulesDir, _ := fixture(t)
-	initRepo(t, modulesDir)
+	repoA, sourceDir, _ := fixture(t)
+	initRepo(t, sourceDir)
 	repoB := t.TempDir()
 	t.Chdir(repoB)
-	initRepo(t, modulesDir)
+	initRepo(t, sourceDir)
 	t.Chdir(repoA)
 
 	handEdit(t, repoA)
 	// Move the module so repo B is stale.
-	if err := os.WriteFile(filepath.Join(modulesDir, "principles.md"), []byte("newer principles\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(sourceDir, "modules", "principles.md"), []byte("newer principles\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	stdout, _, err := run(t, "sync", "--all", "--modules", modulesDir)
+	stdout, _, err := run(t, "sync", "--all")
 	if err == nil {
 		t.Fatalf("sync --all with a hand edit should fail; stdout:\n%s", stdout)
 	}
@@ -324,14 +362,14 @@ func TestSyncAllContinuesPastRefusal(t *testing.T) {
 // The head column is the size of the project-owned prose above the regions, and
 // it sits between the module list and the staleness counts.
 func TestStatusReportsHeadSize(t *testing.T) {
-	repoDir, modulesDir, _ := fixture(t)
+	repoDir, sourceDir, _ := fixture(t)
 	head := "# Project\n\nOne local rule.\n"
 	if err := os.WriteFile(filepath.Join(repoDir, "AGENTS.md"), []byte(head), 0o644); err != nil {
 		t.Fatalf("write AGENTS.md: %v", err)
 	}
-	initRepo(t, modulesDir)
+	initRepo(t, sourceDir)
 
-	stdout, _, err := run(t, "status", "--modules", modulesDir)
+	stdout, _, err := run(t, "status")
 	if err != nil {
 		t.Fatalf("status: %v", err)
 	}

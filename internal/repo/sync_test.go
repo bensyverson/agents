@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/bensyverson/agents/internal/manifest"
-	"github.com/bensyverson/agents/internal/module"
 )
 
 // past is an mtime far enough back that any rewrite is unmistakable.
@@ -267,13 +266,9 @@ func TestSyncPreservesFileTargetTail(t *testing.T) {
 
 	// Now the module moves: the region is rewritten, the tail is not.
 	newBody := delegationBody + "\nand one more rule\n"
-	set, err := module.Load(fstest.MapFS{
-		"delegation.md": &fstest.MapFile{Data: []byte("---\nkind: file\n---\n" + newBody)},
-	})
-	if err != nil {
-		t.Fatalf("module.Load: %v", err)
-	}
-	moved, err := Open(dir, set)
+	source := testSourceFS()
+	source["modules/delegation.md"] = &fstest.MapFile{Data: []byte("---\nkind: file\n---\n" + newBody)}
+	moved, err := Open(dir, Options{Embedded: source})
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}

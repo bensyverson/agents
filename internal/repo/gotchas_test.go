@@ -21,8 +21,22 @@ Traps that cost real time.
 ---
 `
 
-func reseedTemplates() fstest.MapFS {
-	return fstest.MapFS{GotchasFile: &fstest.MapFile{Data: []byte(reseedTemplate)}}
+// reseedSource is the test source with a fresh preamble in its gotchas
+// template: the reseed reads the template of the source the seeding module
+// came from, so the two travel together.
+func reseedSource() fstest.MapFS {
+	fsys := testSourceFS()
+	fsys["templates/"+GotchasFile] = &fstest.MapFile{Data: []byte(reseedTemplate)}
+	return fsys
+}
+
+func mustOpenReseeding(t *testing.T, dir string) *Repo {
+	t.Helper()
+	r, err := Open(dir, Options{Embedded: reseedSource()})
+	if err != nil {
+		t.Fatalf("Open(%s): %v", dir, err)
+	}
+	return r
 }
 
 // bigGotchas builds a gotchas file with n entries.
@@ -95,9 +109,9 @@ func TestReseedGotchasReplacesAnOldPreamble(t *testing.T) {
 		AgentsFile:        fresh("core", coreBody) + fresh("principles", principlesBody),
 		GotchasFile:       old,
 	})
-	r := mustOpen(t, dir)
+	r := mustOpenReseeding(t, dir)
 
-	changed, err := r.ReseedGotchas(reseedTemplates())
+	changed, err := r.ReseedGotchas()
 	if err != nil {
 		t.Fatalf("ReseedGotchas: %v", err)
 	}
@@ -114,7 +128,7 @@ func TestReseedGotchasReplacesAnOldPreamble(t *testing.T) {
 
 	// Re-running is a no-op, and writes nothing.
 	before := snapshot(t, dir)
-	changed, err = r.ReseedGotchas(reseedTemplates())
+	changed, err = r.ReseedGotchas()
 	if err != nil {
 		t.Fatalf("second ReseedGotchas: %v", err)
 	}
@@ -132,7 +146,7 @@ func TestReseedGotchasWithoutAFile(t *testing.T) {
 		manifest.FileName: manifestInline,
 		AgentsFile:        fresh("core", coreBody) + fresh("principles", principlesBody),
 	})
-	changed, err := mustOpen(t, dir).ReseedGotchas(reseedTemplates())
+	changed, err := mustOpenReseeding(t, dir).ReseedGotchas()
 	if err != nil {
 		t.Fatalf("ReseedGotchas: %v", err)
 	}
@@ -144,19 +158,21 @@ func TestReseedGotchasWithoutAFile(t *testing.T) {
 	}
 }
 
-func TestReseedGotchasWithoutTemplates(t *testing.T) {
+// The reseed follows the seed: a repo none of whose enabled modules declares
+// the gotchas file has no template to reseed it from, and is left alone.
+func TestReseedGotchasWithoutASeedingModule(t *testing.T) {
 	const content = "# Gotchas\n\nours\n"
 	dir := newRepo(t, map[string]string{
-		manifest.FileName: manifestInline,
-		AgentsFile:        fresh("core", coreBody) + fresh("principles", principlesBody),
+		manifest.FileName: "modules:\n  - principles\n",
+		AgentsFile:        fresh("principles", principlesBody),
 		GotchasFile:       content,
 	})
-	changed, err := mustOpen(t, dir).ReseedGotchas(nil)
+	changed, err := mustOpenReseeding(t, dir).ReseedGotchas()
 	if err != nil {
-		t.Fatalf("ReseedGotchas(nil): %v", err)
+		t.Fatalf("ReseedGotchas: %v", err)
 	}
 	if changed {
-		t.Error("changed = true with no template FS")
+		t.Error("changed = true with no module declaring the seed")
 	}
 	if got := readFixture(t, dir, GotchasFile); got != content {
 		t.Errorf("%s = %q, want it untouched", GotchasFile, got)

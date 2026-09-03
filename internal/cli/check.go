@@ -26,15 +26,17 @@ func checkCmd() *cobra.Command {
 			"file is missing; otherwise one line per problem and exit 1. It writes nothing,\n" +
 			"which makes it a pre-commit line:\n\n" +
 			"    agents check || exit 1\n\n" +
+			"It never fetches: a source the cache lacks is one line saying to run\n" +
+			"`agents sync`, so a check is offline and repeatable.\n\n" +
 			"With --all every registered repo is checked and each line names its repo.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			set, err := moduleSet(cmd)
+			opts, err := openOptions(repo.FetchNever)
 			if err != nil {
 				return err
 			}
 			var failed []repo.CheckReport
-			err = forEachRepo(cmd, set, all, func(r *repo.Repo) error {
+			err = forEachRepo(cmd, opts, all, func(r *repo.Repo) error {
 				rep, err := r.Check()
 				if err != nil {
 					return err

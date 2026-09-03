@@ -202,8 +202,8 @@ func (s Set) Names() []string {
 	return slices.Sorted(maps.Keys(s.byName))
 }
 
-// Load parses every "*.md" at the root of fsys — the embedded modules or a
-// --modules directory. Anything else, including subdirectories, is ignored.
+// Load parses every "*.md" at the root of fsys — a source's modules/ subtree.
+// Anything else, including subdirectories, is ignored.
 func Load(fsys fs.FS) (Set, error) {
 	entries, err := fs.ReadDir(fsys, ".")
 	if err != nil {
@@ -228,7 +228,7 @@ func Load(fsys fs.FS) (Set, error) {
 	return Set{byName: byName}, nil
 }
 
-// LoadDir loads the modules in a directory — what `--modules <dir>` passes.
+// LoadDir loads the modules in a directory on disk.
 func LoadDir(dir string) (Set, error) {
 	set, err := Load(os.DirFS(dir))
 	if err != nil {

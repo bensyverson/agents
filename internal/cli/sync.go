@@ -7,7 +7,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	agents "github.com/bensyverson/agents"
 	"github.com/bensyverson/agents/internal/repo"
 )
 
@@ -27,7 +26,9 @@ func syncCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "sync",
 		Short: "Re-render every stale region and generated file",
-		Long: "Silent and exit 0 when nothing is stale. A region edited by hand since its\n" +
+		Long: "Silent and exit 0 when nothing is stale. A source the cache lacks is fetched\n" +
+			"first; a source already cached is never moved off its ref — that is `agents\n" +
+			"update`. A region edited by hand since its\n" +
 			"last render stops that repo's sync — no file is written — unless --force.\n" +
 			"With --all every registered repo is visited; refusals are reported under the\n" +
 			"repo's path and the exit status is non-zero if any repo refused.\n\n" +
@@ -35,14 +36,14 @@ func syncCmd() *cobra.Command {
 			"after its rendered lines; the warning never changes the exit status.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			set, err := moduleSet(cmd)
+			opts, err := openOptions(repo.FetchMissing)
 			if err != nil {
 				return err
 			}
 			refused := false
-			err = forEachRepo(cmd, set, all, func(r *repo.Repo) error {
+			err = forEachRepo(cmd, opts, all, func(r *repo.Repo) error {
 				// sync, like init, creates any seed the repo is missing.
-				r.Templates = agents.Templates()
+				r.Seeds = repo.SeedsCreated
 				res, err := r.Sync(force)
 				if errors.Is(err, repo.ErrHandEdited) {
 					if !all {

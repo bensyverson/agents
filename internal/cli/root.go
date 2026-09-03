@@ -10,15 +10,12 @@ import (
 
 	agents "github.com/bensyverson/agents"
 	"github.com/bensyverson/agents/internal/manifest"
-	"github.com/bensyverson/agents/internal/module"
 	"github.com/bensyverson/agents/internal/registry"
 	"github.com/bensyverson/agents/internal/repo"
+	"github.com/bensyverson/agents/internal/source"
 )
 
 const (
-	// modulesFlag overrides the modules built into the binary, for iterating on
-	// a rule without reinstalling.
-	modulesFlag = "modules"
 	// allFlag makes a verb walk the registry instead of the working directory.
 	allFlag = "all"
 	// registryEnvVar overrides the registry file, so a test run never touches
@@ -34,26 +31,28 @@ func Root() *cobra.Command {
 		Long: "Render shared house rules into each repo's AGENTS.md and keep them in sync.\n\n" +
 			"Verbs run on the current directory, which must hold " + manifest.FileName + " (agents does\n" +
 			"not search parent directories); --all runs over every registered repo instead.\n" +
-			"The registry lives at ~/.config/agents/repos, or wherever $" + registryEnvVar + " points.",
+			"The registry lives at ~/.config/agents/repos, or wherever $" + registryEnvVar + " points.\n\n" +
+			"Modules come from the sources " + manifest.FileName + " names — a git URL or a local\n" +
+			"directory, each pinned by ref — or, when it names none, from the source built\n" +
+			"into the binary. Fetched sources are cached under $" + source.CacheEnv + ".",
 		SilenceUsage:  true,
 		SilenceErrors: false,
 	}
-	root.PersistentFlags().String(modulesFlag, "",
-		"read modules from this directory instead of the ones built into the binary")
 	root.AddCommand(initCmd(), addCmd(), removeCmd(), listCmd(), syncCmd(), diffCmd(), statusCmd(), checkCmd())
 	return root
 }
 
-// moduleSet resolves --modules once per run.
-func moduleSet(cmd *cobra.Command) (module.Set, error) {
-	dir, err := cmd.Flags().GetString(modulesFlag)
+// openOptions is how every verb opens a repo: one loader over the shared
+// cache, the source the binary embeds, and the verb's fetch policy.
+//
+// Only sync, add and init pass FetchMissing. Everything else runs offline, so
+// `agents check` in a pre-commit hook never waits on a network it may not have.
+func openOptions(fetch repo.FetchPolicy) (repo.Options, error) {
+	cache, err := source.DefaultCacheDir()
 	if err != nil {
-		return module.Set{}, err
+		return repo.Options{}, err
 	}
-	if dir != "" {
-		return module.LoadDir(dir)
-	}
-	return module.Load(agents.Modules())
+	return repo.Options{Loader: source.New(cache), Embedded: agents.Embedded(), Fetch: fetch}, nil
 }
 
 // registryPath is $AGENTS_REGISTRY when set, else the default under the user's
@@ -87,13 +86,13 @@ func repoDirs(all bool) ([]string, error) {
 // is a stale registry entry, so it warns and carries on.
 //
 // v1 does not walk up from the working directory: the repo is where you are.
-func forEachRepo(cmd *cobra.Command, set module.Set, all bool, fn func(*repo.Repo) error) error {
+func forEachRepo(cmd *cobra.Command, opts repo.Options, all bool, fn func(*repo.Repo) error) error {
 	dirs, err := repoDirs(all)
 	if err != nil {
 		return err
 	}
 	for _, dir := range dirs {
-		r, err := repo.Open(dir, set)
+		r, err := repo.Open(dir, opts)
 		if err != nil {
 			if !all {
 				return err

@@ -2,15 +2,12 @@ package cli
 
 import (
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	agents "github.com/bensyverson/agents"
 	"github.com/bensyverson/agents/internal/gotchas"
-	"github.com/bensyverson/agents/internal/repo"
 )
 
 // writeGotchas replaces the repo's seeded gotchas file.
@@ -31,29 +28,6 @@ func overBudgetGotchas() string {
 	return b.String()
 }
 
-// embeddedTemplate is the gotchas template the binary ships, read the way the
-// CLI reads it — through the templates FS and repo's name constant, so a move
-// of the template file needs no change here.
-func embeddedTemplate(t *testing.T) string {
-	t.Helper()
-	b, err := fs.ReadFile(agents.Templates(), repo.GotchasFile)
-	if err != nil {
-		t.Fatalf("read %s: %v", repo.GotchasFile, err)
-	}
-	return string(b)
-}
-
-// templatePreamble is everything above the template's first "---" line: what a
-// reseed installs.
-func templatePreamble(t *testing.T) string {
-	t.Helper()
-	preamble, _, found := strings.Cut(embeddedTemplate(t), "\n---\n")
-	if !found {
-		t.Fatalf("the gotchas template has no rule line:\n%s", embeddedTemplate(t))
-	}
-	return preamble + "\n"
-}
-
 // wantWarning is the warning both verbs print, built from the same constants
 // the code quotes, so the numbers can never drift from the bounds.
 func wantWarning(entries, lines int) string {
@@ -64,10 +38,10 @@ func wantWarning(entries, lines int) string {
 }
 
 func TestStatusWarnsOnlyOverBudget(t *testing.T) {
-	repoDir, modulesDir, _ := fixture(t)
-	initRepo(t, modulesDir)
+	repoDir, sourceDir, _ := fixture(t)
+	initRepo(t, sourceDir)
 
-	stdout, _, err := run(t, "status", "--modules", modulesDir)
+	stdout, _, err := run(t, "status")
 	if err != nil {
 		t.Fatalf("status: %v", err)
 	}
@@ -77,7 +51,7 @@ func TestStatusWarnsOnlyOverBudget(t *testing.T) {
 
 	content := overBudgetGotchas()
 	writeGotchas(t, repoDir, content)
-	stdout, _, err = run(t, "status", "--modules", modulesDir)
+	stdout, _, err = run(t, "status")
 	if err != nil {
 		t.Fatalf("status: %v", err)
 	}
@@ -95,14 +69,14 @@ func TestStatusWarnsOnlyOverBudget(t *testing.T) {
 }
 
 func TestSyncWarnsAfterItsRenderedLines(t *testing.T) {
-	repoDir, modulesDir, _ := fixture(t)
-	initRepo(t, modulesDir)
+	repoDir, sourceDir, _ := fixture(t)
+	initRepo(t, sourceDir)
 	content := overBudgetGotchas()
 	writeGotchas(t, repoDir, content)
 
 	// Nothing stale: the nag still fires, because sync is the moment the rules
 	// are in front of someone.
-	stdout, _, err := run(t, "sync", "--modules", modulesDir)
+	stdout, _, err := run(t, "sync")
 	if err != nil {
 		t.Fatalf("sync: %v", err)
 	}
@@ -115,10 +89,10 @@ func TestSyncWarnsAfterItsRenderedLines(t *testing.T) {
 	}
 
 	// With something stale, the warning follows the rendered lines.
-	if err := os.WriteFile(filepath.Join(modulesDir, "core.md"), []byte("newer core\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(sourceDir, "modules", "core.md"), []byte("newer core\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	stdout, _, err = run(t, "sync", "--modules", modulesDir)
+	stdout, _, err = run(t, "sync")
 	if err != nil {
 		t.Fatalf("sync: %v", err)
 	}
@@ -133,11 +107,11 @@ func TestSyncWarnsAfterItsRenderedLines(t *testing.T) {
 }
 
 func TestSyncAllPrefixesTheWarningWithTheDir(t *testing.T) {
-	repoDir, modulesDir, _ := fixture(t)
-	initRepo(t, modulesDir)
+	repoDir, sourceDir, _ := fixture(t)
+	initRepo(t, sourceDir)
 	writeGotchas(t, repoDir, overBudgetGotchas())
 
-	stdout, _, err := run(t, "sync", "--all", "--modules", modulesDir)
+	stdout, _, err := run(t, "sync", "--all")
 	if err != nil {
 		t.Fatalf("sync --all: %v", err)
 	}
@@ -147,11 +121,11 @@ func TestSyncAllPrefixesTheWarningWithTheDir(t *testing.T) {
 }
 
 func TestSyncReseedGotchas(t *testing.T) {
-	repoDir, modulesDir, _ := fixture(t)
-	initRepo(t, modulesDir)
+	repoDir, sourceDir, _ := fixture(t)
+	initRepo(t, sourceDir)
 
 	// The seeded file is the template: reseeding it prints nothing.
-	stdout, _, err := run(t, "sync", "--reseed-gotchas", "--modules", modulesDir)
+	stdout, _, err := run(t, "sync", "--reseed-gotchas")
 	if err != nil {
 		t.Fatalf("sync --reseed-gotchas: %v", err)
 	}
@@ -161,7 +135,7 @@ func TestSyncReseedGotchas(t *testing.T) {
 
 	const entry = "## 2026-07-27 — the oldest entry\n\nbody\n"
 	writeGotchas(t, repoDir, "# Gotchas\n\nold two-line header.\n\n---\n\n"+entry)
-	stdout, _, err = run(t, "sync", "--reseed-gotchas", "--modules", modulesDir)
+	stdout, _, err = run(t, "sync", "--reseed-gotchas")
 	if err != nil {
 		t.Fatalf("sync --reseed-gotchas: %v", err)
 	}
@@ -175,7 +149,7 @@ func TestSyncReseedGotchas(t *testing.T) {
 	if strings.Contains(string(got), "old two-line header") {
 		t.Errorf("the old preamble survived:\n%s", got)
 	}
-	if !strings.HasPrefix(string(got), templatePreamble(t)) {
+	if !strings.HasPrefix(string(got), templatePreamble) {
 		t.Errorf("the template preamble was not installed:\n%s", got)
 	}
 	if !strings.HasSuffix(string(got), entry) {
@@ -184,7 +158,7 @@ func TestSyncReseedGotchas(t *testing.T) {
 
 	// Without the flag, sync never touches the file.
 	writeGotchas(t, repoDir, "# Gotchas\n\nold two-line header.\n\n---\n\n"+entry)
-	stdout, _, err = run(t, "sync", "--modules", modulesDir)
+	stdout, _, err = run(t, "sync")
 	if err != nil {
 		t.Fatalf("sync: %v", err)
 	}
@@ -200,12 +174,12 @@ func TestSyncReseedGotchas(t *testing.T) {
 // A file with no rule at all — the pre-template shape — gets the preamble and a
 // rule above everything it holds.
 func TestSyncReseedGotchasWithNoRule(t *testing.T) {
-	repoDir, modulesDir, _ := fixture(t)
-	initRepo(t, modulesDir)
+	repoDir, sourceDir, _ := fixture(t)
+	initRepo(t, sourceDir)
 	const old = "# Gotchas\n\nno rule anywhere.\n\n## 2026-07-27 — the oldest entry\n\nbody\n"
 	writeGotchas(t, repoDir, old)
 
-	stdout, _, err := run(t, "sync", "--reseed-gotchas", "--modules", modulesDir)
+	stdout, _, err := run(t, "sync", "--reseed-gotchas")
 	if err != nil {
 		t.Fatalf("sync --reseed-gotchas: %v", err)
 	}
@@ -222,7 +196,7 @@ func TestSyncReseedGotchasWithNoRule(t *testing.T) {
 	if !strings.HasSuffix(string(got), old) {
 		t.Errorf("the old file is not preserved below the preamble:\n%s", got)
 	}
-	if !strings.HasPrefix(string(got), templatePreamble(t)) {
+	if !strings.HasPrefix(string(got), templatePreamble) {
 		t.Errorf("the template preamble was not installed:\n%s", got)
 	}
 }

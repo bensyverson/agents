@@ -8,8 +8,6 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
-
-	"github.com/bensyverson/agents/internal/module"
 )
 
 // Module bodies used across the repo tests. They are deliberately tiny: what is
@@ -77,39 +75,34 @@ const (
 // indexBody is the body of the index region holding these rows, in order.
 func indexBody(rows ...string) string { return indexPre + strings.Join(rows, "") }
 
-func testSet(t *testing.T) module.Set {
-	t.Helper()
-	set, err := module.Load(fstest.MapFS{
-		"core.md":        &fstest.MapFile{Data: []byte("---\nseeds: [" + GotchasFile + "]\n---\n" + coreBody)},
-		"principles.md":  &fstest.MapFile{Data: []byte(principlesBody)},
-		"stage-build.md": &fstest.MapFile{Data: []byte(stageBody)},
-		"docs.md":        &fstest.MapFile{Data: []byte("---\nseeds: [" + backlogFile + "]\n---\n" + docsBody)},
-		"delegation.md":  &fstest.MapFile{Data: []byte("---\nkind: file\n---\n" + delegationBody)},
-		"alpha.md":       &fstest.MapFile{Data: []byte("---\nkind: file\nwhen: " + alphaWhen + "\n---\n" + alphaBody)},
-		"beta.md":        &fstest.MapFile{Data: []byte("---\nkind: file\nwhen: " + betaWhen + "\n---\n" + betaBody)},
-	})
-	if err != nil {
-		t.Fatalf("module.Load: %v", err)
-	}
-	return set
-}
-
-// testTemplates keys the seed bodies by the repo-relative path the modules
-// declare, exactly as templates/<seed path> does.
-func testTemplates() fstest.MapFS {
+// testSourceFS is the source these tests render from, in the shape every
+// source has: modules/ and templates/ at its root. It stands in for the one
+// the binary embeds.
+func testSourceFS() fstest.MapFS {
 	return fstest.MapFS{
-		GotchasFile: &fstest.MapFile{Data: []byte(templateBody)},
-		backlogFile: &fstest.MapFile{Data: []byte(backlogTemplateBody)},
+		"modules/core.md":          &fstest.MapFile{Data: []byte("---\nseeds: [" + GotchasFile + "]\n---\n" + coreBody)},
+		"modules/principles.md":    &fstest.MapFile{Data: []byte(principlesBody)},
+		"modules/stage-build.md":   &fstest.MapFile{Data: []byte(stageBody)},
+		"modules/docs.md":          &fstest.MapFile{Data: []byte("---\nseeds: [" + backlogFile + "]\n---\n" + docsBody)},
+		"modules/delegation.md":    &fstest.MapFile{Data: []byte("---\nkind: file\n---\n" + delegationBody)},
+		"modules/alpha.md":         &fstest.MapFile{Data: []byte("---\nkind: file\nwhen: " + alphaWhen + "\n---\n" + alphaBody)},
+		"modules/beta.md":          &fstest.MapFile{Data: []byte("---\nkind: file\nwhen: " + betaWhen + "\n---\n" + betaBody)},
+		"templates/" + GotchasFile: &fstest.MapFile{Data: []byte(templateBody)},
+		"templates/" + backlogFile: &fstest.MapFile{Data: []byte(backlogTemplateBody)},
 	}
 }
 
-// testTemplatesWithHead is a template FS that also carries a head template, so
-// the seeded and unseeded paths are both exercised.
-func testTemplatesWithHead() fstest.MapFS {
-	fsys := testTemplates()
-	fsys[HeadTemplate] = &fstest.MapFile{Data: []byte(headTemplateBody)}
+// testSourceWithHead also carries a head template, so the seeded and unseeded
+// heads are both exercised.
+func testSourceWithHead() fstest.MapFS {
+	fsys := testSourceFS()
+	fsys["templates/"+HeadTemplate] = &fstest.MapFile{Data: []byte(headTemplateBody)}
 	return fsys
 }
+
+// testOptions opens a repo against the test source, with no loader: a manifest
+// that names no sources needs neither a cache nor git.
+func testOptions() Options { return Options{Embedded: testSourceFS()} }
 
 // newRepo lays out a temp directory from repo-relative path -> content.
 func newRepo(t *testing.T, files map[string]string) string {
@@ -190,7 +183,7 @@ func snapshot(t *testing.T, dir string) map[string]string {
 
 func mustOpen(t *testing.T, dir string) *Repo {
 	t.Helper()
-	r, err := Open(dir, testSet(t))
+	r, err := Open(dir, testOptions())
 	if err != nil {
 		t.Fatalf("Open(%s): %v", dir, err)
 	}
@@ -202,7 +195,7 @@ func mustOpen(t *testing.T, dir string) *Repo {
 func mustOpenSeeding(t *testing.T, dir string) *Repo {
 	t.Helper()
 	r := mustOpen(t, dir)
-	r.Templates = testTemplates()
+	r.Seeds = SeedsCreated
 	return r
 }
 

@@ -9,19 +9,19 @@ import (
 
 // staleModule rewrites a module on disk so the rendered region is one version
 // behind, the way a module commit leaves every repo.
-func staleModule(t *testing.T, modulesDir string) {
+func staleModule(t *testing.T, sourceDir string) {
 	t.Helper()
-	path := filepath.Join(modulesDir, "core.md")
+	path := filepath.Join(sourceDir, "modules", "core.md")
 	if err := os.WriteFile(path, []byte(coreBody+"and a new rule\n"), 0o644); err != nil {
 		t.Fatalf("write %s: %v", path, err)
 	}
 }
 
 func TestCheckSilentOnCleanRepo(t *testing.T) {
-	_, modulesDir, _ := fixture(t)
-	initRepo(t, modulesDir)
+	_, sourceDir, _ := fixture(t)
+	initRepo(t, sourceDir)
 
-	stdout, stderr, err := run(t, "check", "--modules", modulesDir)
+	stdout, stderr, err := run(t, "check")
 	if err != nil {
 		t.Fatalf("check on a clean repo: %v (stderr %s)", err, stderr)
 	}
@@ -31,12 +31,12 @@ func TestCheckSilentOnCleanRepo(t *testing.T) {
 }
 
 func TestCheckFailsOnStaleAndAdvisesSync(t *testing.T) {
-	repoDir, modulesDir, _ := fixture(t)
-	initRepo(t, modulesDir)
+	repoDir, sourceDir, _ := fixture(t)
+	initRepo(t, sourceDir)
 	before := readAgents(t, repoDir)
-	staleModule(t, modulesDir)
+	staleModule(t, sourceDir)
 
-	stdout, _, err := run(t, "check", "--modules", modulesDir)
+	stdout, _, err := run(t, "check")
 	if err == nil {
 		t.Fatal("check returned nil on a stale repo; the process would exit 0")
 	}
@@ -53,11 +53,11 @@ func TestCheckFailsOnStaleAndAdvisesSync(t *testing.T) {
 }
 
 func TestCheckFailsOnHandEditAndAdvisesDiff(t *testing.T) {
-	repoDir, modulesDir, _ := fixture(t)
-	initRepo(t, modulesDir)
+	repoDir, sourceDir, _ := fixture(t)
+	initRepo(t, sourceDir)
 	handEdit(t, repoDir)
 
-	stdout, _, err := run(t, "check", "--modules", modulesDir)
+	stdout, _, err := run(t, "check")
 	if err == nil {
 		t.Fatal("check returned nil on a hand-edited repo; the process would exit 0")
 	}
@@ -74,11 +74,11 @@ func TestCheckFailsOnHandEditAndAdvisesDiff(t *testing.T) {
 }
 
 func TestCheckAllPrefixesTheRepoDir(t *testing.T) {
-	repoDir, modulesDir, _ := fixture(t)
-	initRepo(t, modulesDir)
-	staleModule(t, modulesDir)
+	repoDir, sourceDir, _ := fixture(t)
+	initRepo(t, sourceDir)
+	staleModule(t, sourceDir)
 
-	stdout, _, err := run(t, "check", "--all", "--modules", modulesDir)
+	stdout, _, err := run(t, "check", "--all")
 	if err == nil {
 		t.Fatal("check --all returned nil with a stale repo registered")
 	}
@@ -89,10 +89,10 @@ func TestCheckAllPrefixesTheRepoDir(t *testing.T) {
 }
 
 func TestCheckAllSilentWhenEveryRepoIsClean(t *testing.T) {
-	_, modulesDir, _ := fixture(t)
-	initRepo(t, modulesDir)
+	_, sourceDir, _ := fixture(t)
+	initRepo(t, sourceDir)
 
-	stdout, _, err := run(t, "check", "--all", "--modules", modulesDir)
+	stdout, _, err := run(t, "check", "--all")
 	if err != nil {
 		t.Fatalf("check --all on a clean fleet: %v", err)
 	}

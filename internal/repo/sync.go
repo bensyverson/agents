@@ -97,7 +97,7 @@ func (r *Repo) Sync(force bool) (SyncResult, error) {
 
 	// Seeding after the render, and on every sync rather than on init alone,
 	// so a repo picks up a seed its modules gained since it was set up.
-	seeded, err := seed(r.Dir, r.mods, r.Templates)
+	seeded, err := r.seed()
 	res.Seeded = seeded
 	if err != nil {
 		return res, fmt.Errorf("%s: %w", r.Dir, err)

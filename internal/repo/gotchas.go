@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
+	"slices"
 
 	"github.com/bensyverson/agents/internal/gotchas"
 )
@@ -15,14 +16,17 @@ func (r *Repo) Gotchas() (gotchas.File, bool, error) {
 	return gotchas.Read(filepath.Join(r.Dir, GotchasFile))
 }
 
-// ReseedGotchas replaces the gotchas file's preamble with the one in
-// templates, and reports whether it wrote. The entries below the first rule
-// line are copied byte for byte — this only ever refreshes the instructions,
-// which are the template's to own.
+// ReseedGotchas replaces the gotchas file's preamble with the one its source
+// ships, and reports whether it wrote. The entries below the first rule line
+// are copied byte for byte — this only ever refreshes the instructions, which
+// are the template's to own.
 //
-// A repo with no gotchas file is left alone: creating one is init's seeding
-// step, not this. A nil template FS skips the step, as it does in Init.
-func (r *Repo) ReseedGotchas(templates fs.FS) (bool, error) {
+// The template is the one the seed came from: whichever enabled module
+// declares the gotchas file, read from that module's source. A repo no enabled
+// module seeds a gotchas file for has nothing to refresh and is left alone,
+// and so is a repo with no gotchas file — creating one is init's seeding step.
+func (r *Repo) ReseedGotchas() (bool, error) {
+	templates := r.templatesSeeding(GotchasFile)
 	if templates == nil {
 		return false, nil
 	}
@@ -46,4 +50,15 @@ func (r *Repo) ReseedGotchas(templates fs.FS) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+// templatesSeeding is the templates of the source that supplies rel, found
+// through the enabled module that declares it as a seed.
+func (r *Repo) templatesSeeding(rel string) fs.FS {
+	for _, m := range r.mods {
+		if slices.Contains(m.Seeds, rel) {
+			return r.templatesFor(m.Name)
+		}
+	}
+	return nil
 }

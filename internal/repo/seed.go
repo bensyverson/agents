@@ -6,35 +6,47 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+)
 
-	"github.com/bensyverson/agents/internal/module"
+// SeedPolicy says whether a sync creates the files the repo's modules declare
+// as seeds. The read-only verbs open a repo that creates nothing at all, so
+// `agents check` can never leave a file behind.
+type SeedPolicy int
+
+const (
+	// SeedsSkipped leaves declared seeds alone.
+	SeedsSkipped SeedPolicy = iota
+	// SeedsCreated creates every declared seed the repo does not have yet.
+	SeedsCreated
 )
 
 // seed creates every file the repo's modules declare as a seed and that the
-// repo does not have yet, from templates/<seed path>, and returns the paths it
-// created in manifest order.
+// repo does not have yet, and returns the paths it created in manifest order.
+// Each seed's body comes from the templates of the source its module came
+// from: a source ships its rules and the files those rules refer to together.
 //
 // It never overwrites: a seeded file is the repo's own from the moment it
 // exists, so a project can rewrite its gotchas or backlog freely. A declared
 // seed with no template is a packaging mistake and an error — silently seeding
 // nothing would leave every repo missing a file its rules refer to.
-func seed(dir string, mods []module.Module, templates fs.FS) ([]string, error) {
-	if templates == nil {
+func (r *Repo) seed() ([]string, error) {
+	if r.Seeds != SeedsCreated {
 		return nil, nil
 	}
 	var created []string
 	done := make(map[string]bool)
-	for _, m := range mods {
+	for _, m := range r.mods {
+		templates := r.templatesFor(m.Name)
 		for _, rel := range m.Seeds {
 			if done[rel] {
 				continue
 			}
 			done[rel] = true
-			body, err := fs.ReadFile(templates, rel)
+			body, err := readTemplate(templates, rel)
 			if err != nil {
 				return created, fmt.Errorf("module %s seeds %s: reading template: %w", m.Name, rel, err)
 			}
-			wrote, err := createIfMissing(filepath.Join(dir, filepath.FromSlash(rel)), body)
+			wrote, err := createIfMissing(filepath.Join(r.Dir, filepath.FromSlash(rel)), body)
 			if err != nil {
 				return created, err
 			}
@@ -44,6 +56,15 @@ func seed(dir string, mods []module.Module, templates fs.FS) ([]string, error) {
 		}
 	}
 	return created, nil
+}
+
+// readTemplate reads one seed's body, treating a source with no templates at
+// all as a source missing that template.
+func readTemplate(templates fs.FS, rel string) ([]byte, error) {
+	if templates == nil {
+		return nil, fs.ErrNotExist
+	}
+	return fs.ReadFile(templates, rel)
 }
 
 // createIfMissing writes content to path only if nothing is there yet, creating

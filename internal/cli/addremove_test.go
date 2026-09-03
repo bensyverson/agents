@@ -16,10 +16,10 @@ const (
 	delegationModule = "---\nkind: file\n---\n" + delegationBody
 )
 
-// writeModule adds a module to the --modules directory a fixture built.
-func writeModule(t *testing.T, modulesDir, name, body string) {
+// writeModule adds a module to the source directory a fixture built.
+func writeModule(t *testing.T, sourceDir, name, body string) {
 	t.Helper()
-	if err := os.WriteFile(filepath.Join(modulesDir, name+".md"), []byte(body), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(sourceDir, "modules", name+".md"), []byte(body), 0o644); err != nil {
 		t.Fatalf("write %s: %v", name, err)
 	}
 }
@@ -36,13 +36,13 @@ func head(t *testing.T, repoDir string) string {
 }
 
 func TestAddEnablesRendersAndInstallsTheFile(t *testing.T) {
-	repoDir, modulesDir, _ := fixture(t)
-	writeModule(t, modulesDir, "docs", docsBody)
-	writeModule(t, modulesDir, "delegation", delegationModule)
-	initRepo(t, modulesDir)
+	repoDir, sourceDir, _ := fixture(t)
+	writeModule(t, sourceDir, "docs", docsBody)
+	writeModule(t, sourceDir, "delegation", delegationModule)
+	initRepo(t, sourceDir)
 	before := head(t, repoDir)
 
-	stdout, _, err := run(t, "add", "docs", "delegation", "--modules", modulesDir)
+	stdout, _, err := run(t, "add", "docs", "delegation")
 	if err != nil {
 		t.Fatalf("add: %v", err)
 	}
@@ -65,16 +65,16 @@ func TestAddEnablesRendersAndInstallsTheFile(t *testing.T) {
 		t.Errorf("add rewrote the project-owned head:\n got %q\nwant %q", now, before)
 	}
 	// Whatever add wrote, a following sync must have nothing to do.
-	if out, _, err := run(t, "sync", "--modules", modulesDir); err != nil || out != "" {
+	if out, _, err := run(t, "sync"); err != nil || out != "" {
 		t.Errorf("sync after add printed %q (err %v), want silence", out, err)
 	}
 }
 
 func TestAddSaysWhenAModuleIsAlreadyEnabled(t *testing.T) {
-	_, modulesDir, _ := fixture(t)
-	initRepo(t, modulesDir)
+	_, sourceDir, _ := fixture(t)
+	initRepo(t, sourceDir)
 
-	stdout, _, err := run(t, "add", "core", "--modules", modulesDir)
+	stdout, _, err := run(t, "add", "core")
 	if err != nil {
 		t.Fatalf("add: %v", err)
 	}
@@ -84,10 +84,10 @@ func TestAddSaysWhenAModuleIsAlreadyEnabled(t *testing.T) {
 }
 
 func TestAddRejectsAnUnknownModule(t *testing.T) {
-	_, modulesDir, _ := fixture(t)
-	initRepo(t, modulesDir)
+	_, sourceDir, _ := fixture(t)
+	initRepo(t, sourceDir)
 
-	_, _, err := run(t, "add", "nosuch", "--modules", modulesDir)
+	_, _, err := run(t, "add", "nosuch")
 	if err == nil {
 		t.Fatal("add of an unknown module returned nil error")
 	}
@@ -97,15 +97,15 @@ func TestAddRejectsAnUnknownModule(t *testing.T) {
 }
 
 func TestRemoveDropsTheRegionAndDeletesTheFile(t *testing.T) {
-	repoDir, modulesDir, _ := fixture(t)
-	writeModule(t, modulesDir, "delegation", delegationModule)
-	initRepo(t, modulesDir)
-	if _, _, err := run(t, "add", "delegation", "--modules", modulesDir); err != nil {
+	repoDir, sourceDir, _ := fixture(t)
+	writeModule(t, sourceDir, "delegation", delegationModule)
+	initRepo(t, sourceDir)
+	if _, _, err := run(t, "add", "delegation"); err != nil {
 		t.Fatalf("add: %v", err)
 	}
 	before := head(t, repoDir)
 
-	stdout, _, err := run(t, "remove", "delegation", "--modules", modulesDir)
+	stdout, _, err := run(t, "remove", "delegation")
 	if err != nil {
 		t.Fatalf("remove: %v", err)
 	}
@@ -120,16 +120,16 @@ func TestRemoveDropsTheRegionAndDeletesTheFile(t *testing.T) {
 	if now := head(t, repoDir); now != before {
 		t.Errorf("remove rewrote the project-owned head:\n got %q\nwant %q", now, before)
 	}
-	if out, _, err := run(t, "sync", "--modules", modulesDir); err != nil || out != "" {
+	if out, _, err := run(t, "sync"); err != nil || out != "" {
 		t.Errorf("sync after remove printed %q (err %v), want silence", out, err)
 	}
 }
 
 func TestRemoveKeepsAndNamesAHandExtendedFile(t *testing.T) {
-	repoDir, modulesDir, _ := fixture(t)
-	writeModule(t, modulesDir, "delegation", delegationModule)
-	initRepo(t, modulesDir)
-	if _, _, err := run(t, "add", "delegation", "--modules", modulesDir); err != nil {
+	repoDir, sourceDir, _ := fixture(t)
+	writeModule(t, sourceDir, "delegation", delegationModule)
+	initRepo(t, sourceDir)
+	if _, _, err := run(t, "add", "delegation"); err != nil {
 		t.Fatalf("add: %v", err)
 	}
 	path := filepath.Join(repoDir, delegationPath)
@@ -142,7 +142,7 @@ func TestRemoveKeepsAndNamesAHandExtendedFile(t *testing.T) {
 		t.Fatalf("extend %s: %v", delegationPath, err)
 	}
 
-	stdout, _, err := run(t, "remove", "delegation", "--modules", modulesDir)
+	stdout, _, err := run(t, "remove", "delegation")
 	if err != nil {
 		t.Fatalf("remove: %v", err)
 	}
@@ -162,11 +162,11 @@ func TestRemoveKeepsAndNamesAHandExtendedFile(t *testing.T) {
 }
 
 func TestRemoveRejectsAModuleThatIsNotEnabled(t *testing.T) {
-	_, modulesDir, _ := fixture(t)
-	writeModule(t, modulesDir, "docs", docsBody)
-	initRepo(t, modulesDir)
+	_, sourceDir, _ := fixture(t)
+	writeModule(t, sourceDir, "docs", docsBody)
+	initRepo(t, sourceDir)
 
-	_, _, err := run(t, "remove", "docs", "--modules", modulesDir)
+	_, _, err := run(t, "remove", "docs")
 	if err == nil {
 		t.Fatal("remove of a module that is not enabled returned nil error")
 	}
@@ -176,12 +176,12 @@ func TestRemoveRejectsAModuleThatIsNotEnabled(t *testing.T) {
 }
 
 func TestListMarksTheEnabledModules(t *testing.T) {
-	_, modulesDir, _ := fixture(t)
-	writeModule(t, modulesDir, "docs", docsBody)
-	writeModule(t, modulesDir, "delegation", delegationModule)
-	initRepo(t, modulesDir)
+	_, sourceDir, _ := fixture(t)
+	writeModule(t, sourceDir, "docs", docsBody)
+	writeModule(t, sourceDir, "delegation", delegationModule)
+	initRepo(t, sourceDir)
 
-	stdout, _, err := run(t, "list", "--modules", modulesDir)
+	stdout, _, err := run(t, "list")
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -214,12 +214,11 @@ func TestListMarksTheEnabledModules(t *testing.T) {
 }
 
 // `agents list` answers "what could I enable?", so it must work where there is
-// no manifest at all — marking nothing.
+// no manifest at all — listing the binary's own modules and marking nothing.
 func TestListWorksOutsideAManagedRepo(t *testing.T) {
-	_, modulesDir, _ := fixture(t)
-	t.Chdir(t.TempDir())
+	emptyRepo(t)
 
-	stdout, _, err := run(t, "list", "--modules", modulesDir)
+	stdout, _, err := run(t, "list")
 	if err != nil {
 		t.Fatalf("list outside a managed repo: %v", err)
 	}

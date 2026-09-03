@@ -40,8 +40,7 @@ func TestDogfoodThisRepo(t *testing.T) {
 
 	res, err := Init(dir, InitOptions{
 		Modules:      m.Entries(),
-		Set:          set,
-		Templates:    agents.Templates(),
+		Open:         Options{Embedded: agents.Embedded()},
 		RegistryPath: filepath.Join(t.TempDir(), "repos"),
 	})
 	if err != nil {
@@ -58,7 +57,7 @@ func TestDogfoodThisRepo(t *testing.T) {
 
 	t.Logf("the embedded modules no longer match the hand-rendered AGENTS.md; checking idempotence instead:\n%s",
 		render.Diff(original, rendered))
-	r, err := Open(dir, set)
+	r, err := Open(dir, Options{Embedded: agents.Embedded()})
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}

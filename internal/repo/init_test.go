@@ -15,8 +15,7 @@ func initOptions(t *testing.T, modules ...string) InitOptions {
 	t.Helper()
 	return InitOptions{
 		Modules:      modules,
-		Set:          testSet(t),
-		Templates:    testTemplates(),
+		Open:         testOptions(),
 		RegistryPath: filepath.Join(t.TempDir(), "repos"),
 	}
 }
@@ -228,7 +227,7 @@ func readFile(t *testing.T, path string) string {
 func initOptionsWithHead(t *testing.T, modules ...string) InitOptions {
 	t.Helper()
 	opts := initOptions(t, modules...)
-	opts.Templates = testTemplatesWithHead()
+	opts.Open.Embedded = testSourceWithHead()
 	return opts
 }
 

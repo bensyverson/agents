@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 
-	agents "github.com/bensyverson/agents"
 	"github.com/bensyverson/agents/internal/gotchas"
 	"github.com/bensyverson/agents/internal/repo"
 )
@@ -37,7 +36,7 @@ func prefixed(all bool, dir, line string) string {
 // advisory — neither changes sync's exit status.
 func gotchasReport(out io.Writer, r *repo.Repo, reseed, all bool) error {
 	if reseed {
-		changed, err := r.ReseedGotchas(agents.Templates())
+		changed, err := r.ReseedGotchas()
 		if err != nil {
 			return err
 		}

@@ -47,8 +47,8 @@ type AddResult struct {
 // after every region already there, above whatever tail the project wrote.
 // Nothing above the first region is ever touched.
 //
-// The render is the ordinary Sync, so seeds are created (when Templates is
-// set) and a hand-edited region refuses the whole thing. A refusal writes
+// The render is the ordinary Sync, so seeds are created (when Seeds is
+// SeedsCreated) and a hand-edited region refuses the whole thing. A refusal writes
 // nothing at all, the manifest included: the repo is exactly as it was, and
 // the result's Sync holds the diffs the caller should show.
 //
@@ -67,7 +67,7 @@ func (r *Repo) Add(names []string) (AddResult, error) {
 	for _, name := range names {
 		ref, err := r.Manifest.Ref(name)
 		switch {
-		case err != nil || !r.knows(ref.Name):
+		case err != nil || !r.knows(ref):
 			unknown = append(unknown, name)
 		case slices.Contains(modules, ref):
 			res.Already = append(res.Already, name)
@@ -147,17 +147,19 @@ func (r *Repo) Remove(names []string) (RemoveResult, error) {
 	}
 	var res RemoveResult
 	var unknown, disabled []string
+	var refs []manifest.ModuleRef
 	for _, name := range names {
 		ref, err := r.Manifest.Ref(name)
 		switch {
-		case err != nil || !r.knows(ref.Name):
+		case err != nil || !r.knows(ref):
 			unknown = append(unknown, name)
 		case !slices.Contains(r.Manifest.Modules, ref):
 			disabled = append(disabled, name)
-		case slices.Contains(res.Removed, name):
+		case slices.Contains(refs, ref):
 			// Named twice; once is enough.
 		default:
 			res.Removed = append(res.Removed, name)
+			refs = append(refs, ref)
 		}
 	}
 	if len(unknown) > 0 {
@@ -167,7 +169,7 @@ func (r *Repo) Remove(names []string) (RemoveResult, error) {
 		return RemoveResult{}, wrapNames(ErrNotEnabled, disabled)
 	}
 	kept := slices.DeleteFunc(slices.Clone(r.Manifest.Modules), func(ref manifest.ModuleRef) bool {
-		return slices.Contains(res.Removed, ref.Name)
+		return slices.Contains(refs, ref)
 	})
 	if len(kept) == 0 {
 		return RemoveResult{}, wrapNames(ErrNoModulesLeft, res.Removed)
@@ -177,8 +179,8 @@ func (r *Repo) Remove(names []string) (RemoveResult, error) {
 		return RemoveResult{}, err
 	}
 
-	for _, name := range res.Removed {
-		mod, _ := r.Set.Get(name)
+	for _, ref := range refs {
+		mod, _ := r.Sources.module(ref)
 		removed, err := r.removeRegion(mod)
 		res.Regions = append(res.Regions, removed)
 		if err != nil {
@@ -263,9 +265,9 @@ func (r *Repo) removeRegion(m module.Module) (RemovedRegion, error) {
 	return out, nil
 }
 
-// knows reports whether the module set has a module of this name.
-func (r *Repo) knows(name string) bool {
-	_, ok := r.Set.Get(name)
+// knows reports whether the source a ref names holds the module it names.
+func (r *Repo) knows(ref manifest.ModuleRef) bool {
+	_, ok := r.Sources.module(ref)
 	return ok
 }
 
@@ -274,17 +276,17 @@ func (r *Repo) knows(name string) bool {
 // committing it to .agents.yaml.
 func (r *Repo) with(modules []manifest.ModuleRef) (*Repo, error) {
 	m := manifest.Manifest{Sources: r.Manifest.Sources, Modules: modules}
-	mods, err := manifest.Resolve(m, r.Set)
+	mods, origin, err := r.Sources.resolve(m)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", r.Dir, err)
 	}
-	return &Repo{Dir: r.Dir, Set: r.Set, Manifest: m, Templates: r.Templates, mods: mods}, nil
+	return &Repo{Dir: r.Dir, Manifest: m, Sources: r.Sources, Seeds: r.Seeds, mods: mods, origin: origin}, nil
 }
 
 // adopt takes on the manifest a change has just written, so a caller that goes
 // on using the repo sees what is on disk.
 func (r *Repo) adopt(next *Repo) {
-	r.Manifest, r.mods = next.Manifest, next.mods
+	r.Manifest, r.mods, r.origin = next.Manifest, next.mods, next.origin
 }
 
 func wrapNames(err error, names []string) error {
