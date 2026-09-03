@@ -22,6 +22,11 @@ const Extension = ".md"
 // file modules can never collide on where they write.
 const FileDir = "project/agents"
 
+// ReservedName is the one module name no source may use: the tool generates a
+// region of that name itself — the index of situational modules — so a module
+// called this would collide with it.
+const ReservedName = "index"
+
 // delimiter opens and closes the frontmatter block.
 const delimiter = "---"
 
@@ -31,6 +36,7 @@ var (
 	ErrUnknownKind             = errors.New("unknown kind")
 	ErrPathNotAllowed          = errors.New("path is derived from the module's name; remove the path key")
 	ErrWhenNotAllowed          = errors.New("when is only valid on kind: file")
+	ErrReservedName            = errors.New("name is reserved for the generated index region")
 	ErrEmptyBody               = errors.New("module has no body")
 	ErrSeedPathInvalid         = errors.New("seed path must be relative to the repo")
 )
@@ -60,6 +66,9 @@ type frontmatter struct {
 // Parse splits a module file into its optional leading frontmatter and its
 // body, and content-addresses the body.
 func Parse(name, raw string) (Module, error) {
+	if name == ReservedName {
+		return Module{}, fmt.Errorf("%w: %q", ErrReservedName, name)
+	}
 	front, body, err := splitFrontmatter(raw)
 	if err != nil {
 		return Module{}, err

@@ -20,6 +20,20 @@ func mod(name, body string) module.Module {
 	return module.Module{Name: name, Kind: module.KindInline, Body: body, Hash: testHash(body)}
 }
 
+// fileMod is a kind:file module, optionally situational. The path is spelled
+// out rather than taken from the module package, so the tests pin the
+// convention the index prints.
+func fileMod(name, when, body string) module.Module {
+	return module.Module{
+		Name: name,
+		Kind: module.KindFile,
+		Path: "project/agents/" + name + ".md",
+		When: when,
+		Body: body,
+		Hash: testHash(body),
+	}
+}
+
 // wantRegion is the exact text a rendered region for m must have.
 func wantRegion(m module.Module) string {
 	return markedRegion(m.Name, m.Hash, m.Body)

@@ -130,9 +130,11 @@ type RemoveResult struct {
 // It is not a sync: only the named regions are touched, so a stale or
 // hand-edited region of another module is left exactly as it was, and a
 // hand-edited region of a module being removed goes anyway — removing is a
-// decision. A kind:file module's file is deleted when it held nothing but the
-// region; a file the project has written in keeps every one of its own bytes
-// and only loses the region, and the result says so for the caller to warn.
+// decision. The one region it touches unasked is the generated index, whose
+// rows are the manifest's and so cannot outlive it. A kind:file module's file
+// is deleted when it held nothing but the region; a file the project has
+// written in keeps every one of its own bytes and only loses the region, and
+// the result says so for the caller to warn.
 // Nothing above the first region of AGENTS.md is ever touched.
 //
 // The result describes a completed removal. The manifest is written last, so
@@ -181,11 +183,40 @@ func (r *Repo) Remove(names []string) (RemoveResult, error) {
 			return res, err
 		}
 	}
+	if err := next.updateIndex(); err != nil {
+		return res, err
+	}
 	if err := manifest.Write(filepath.Join(r.Dir, manifest.FileName), next.Manifest); err != nil {
 		return res, err
 	}
 	r.adopt(next)
 	return res, nil
+}
+
+// updateIndex brings AGENTS.md's generated index into line with the modules
+// this repo now has. Remove touches no region it was not asked to, and the
+// index is the exception it cannot avoid: its body is the manifest's, so
+// dropping a situational module leaves a row that names a file the removal
+// just deleted. Add needs no such thing — it renders through Sync.
+func (r *Repo) updateIndex() error {
+	path := filepath.Join(r.Dir, AgentsFile)
+	current, exists, err := readIfPresent(path)
+	if err != nil || !exists {
+		return err
+	}
+	var next string
+	if idx, ok := render.Index(r.mods); ok {
+		next, err = render.SetRegion(current, idx)
+	} else {
+		next, _, err = render.RemoveRegions(current, render.IndexName)
+	}
+	if err != nil {
+		return fmt.Errorf("%s: %w", AgentsFile, err)
+	}
+	if next == current {
+		return nil
+	}
+	return writeFile(path, next)
 }
 
 // removeRegion deletes one module's region from the file that holds it, and

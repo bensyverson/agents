@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -20,6 +21,14 @@ const (
 	docsBody       = "docs rules\n"
 	delegationBody = "# Delegating\n\nrules\n"
 	delegationPath = "project/agents/delegation.md"
+	// alpha and beta are the situational modules: kind:file with a when:
+	// phrase, so enabling either one puts a row in the generated index.
+	alphaBody = "# Alpha\n\nrules\n"
+	alphaWhen = "When alpha applies"
+	alphaPath = "project/agents/alpha.md"
+	betaBody  = "# Beta\n\nrules\n"
+	betaWhen  = "When beta applies"
+	betaPath  = "project/agents/beta.md"
 	// backlogFile is a second seed path, so a test can tell one from another.
 	backlogFile = "project/backlog.md"
 	// templateBody and backlogTemplateBody stand in for the real templates;
@@ -54,6 +63,20 @@ func stale(name, oldBody string) string { return region(name, testHash(oldBody),
 // oldCoreBody is what core used to say, for stale fixtures.
 const oldCoreBody = "old core rules\n"
 
+// The generated index, spelled out rather than taken from the render package,
+// so these tests say for themselves what belongs in AGENTS.md.
+const (
+	indexRegion = "index"
+	indexPre    = "## Situational instructions\n\n" +
+		"These files carry instructions for specific situations. When one applies, read the file before acting and follow it.\n\n" +
+		"| Situation | File |\n|---|---|\n"
+	alphaRow = "| " + alphaWhen + " | `" + alphaPath + "` |\n"
+	betaRow  = "| " + betaWhen + " | `" + betaPath + "` |\n"
+)
+
+// indexBody is the body of the index region holding these rows, in order.
+func indexBody(rows ...string) string { return indexPre + strings.Join(rows, "") }
+
 func testSet(t *testing.T) module.Set {
 	t.Helper()
 	set, err := module.Load(fstest.MapFS{
@@ -62,6 +85,8 @@ func testSet(t *testing.T) module.Set {
 		"stage-build.md": &fstest.MapFile{Data: []byte(stageBody)},
 		"docs.md":        &fstest.MapFile{Data: []byte("---\nseeds: [" + backlogFile + "]\n---\n" + docsBody)},
 		"delegation.md":  &fstest.MapFile{Data: []byte("---\nkind: file\n---\n" + delegationBody)},
+		"alpha.md":       &fstest.MapFile{Data: []byte("---\nkind: file\nwhen: " + alphaWhen + "\n---\n" + alphaBody)},
+		"beta.md":        &fstest.MapFile{Data: []byte("---\nkind: file\nwhen: " + betaWhen + "\n---\n" + betaBody)},
 	})
 	if err != nil {
 		t.Fatalf("module.Load: %v", err)

@@ -15,7 +15,7 @@ func TestListSortsAndMarksEnabledModules(t *testing.T) {
 		names = append(names, info.Name)
 		byName[info.Name] = info
 	}
-	want := []string{"core", "delegation", "docs", "principles", "stage-build"}
+	want := []string{"alpha", "beta", "core", "delegation", "docs", "principles", "stage-build"}
 	if len(names) != len(want) {
 		t.Fatalf("names = %v, want %v", names, want)
 	}
@@ -29,7 +29,7 @@ func TestListSortsAndMarksEnabledModules(t *testing.T) {
 			t.Errorf("%s is not marked enabled", name)
 		}
 	}
-	for _, name := range []string{"docs", "delegation", "stage-build"} {
+	for _, name := range []string{"docs", "delegation", "stage-build", "alpha", "beta"} {
 		if byName[name].Enabled {
 			t.Errorf("%s is marked enabled", name)
 		}

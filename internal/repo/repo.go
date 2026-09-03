@@ -125,6 +125,12 @@ func (r *Repo) Targets() ([]Target, error) {
 		}
 		inline = append(inline, m)
 	}
+	// The index is a module in every respect but where it comes from, and it
+	// goes last, so it renders after the last inline region and is checked,
+	// diffed and removed by the machinery every other region already uses.
+	if idx, ok := render.Index(r.mods); ok {
+		inline = append(inline, idx)
+	}
 
 	targets := make([]Target, 0, 1+len(files))
 	t, err := r.target(AgentsFile, inline)
