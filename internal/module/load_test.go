@@ -14,7 +14,9 @@ import (
 	"github.com/bensyverson/agents/internal/module"
 )
 
-func agentsModules(t *testing.T) fs.FS {
+// embeddedModules is the module subtree of the source the binary embeds — the
+// example source, which is what a repo with no sources: block renders from.
+func embeddedModules(t *testing.T) fs.FS {
 	t.Helper()
 	return agents.Modules()
 }
@@ -327,70 +329,32 @@ func TestNamesIsACopy(t *testing.T) {
 	}
 }
 
-func TestLoadDir(t *testing.T) {
+// Load works over a real directory the same way, ignoring anything that is
+// not a module file: os.DirFS is how every caller reaches one.
+func TestLoadFromADirectory(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "core.md"), "## Working rules\n")
 	writeFile(t, filepath.Join(dir, "README.txt"), "ignored\n")
 
-	set, err := module.LoadDir(dir)
+	set, err := module.Load(os.DirFS(dir))
 	if err != nil {
-		t.Fatalf("LoadDir: %v", err)
+		t.Fatalf("Load: %v", err)
 	}
 	if got, want := set.Names(), []string{"core"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("Names() = %v, want %v", got, want)
 	}
 }
 
-func TestLoadDirMissing(t *testing.T) {
-	if _, err := module.LoadDir(filepath.Join(t.TempDir(), "nope")); err == nil {
-		t.Fatal("LoadDir(missing) = nil error, want one")
+func TestLoadFromAMissingDirectory(t *testing.T) {
+	if _, err := module.Load(os.DirFS(filepath.Join(t.TempDir(), "nope"))); err == nil {
+		t.Fatal("Load(missing directory) = nil error, want one")
 	}
 }
 
-// The criterion from the job leaf: the embedded FS and a --modules directory
-// holding the same bytes must produce identical Sets.
-func TestEmbeddedAndDirAgree(t *testing.T) {
-	embedded, err := module.Load(agentsModules(t))
-	if err != nil {
-		t.Fatalf("Load(embedded): %v", err)
-	}
-
-	dir := t.TempDir()
-	entries, err := fs.ReadDir(agentsModules(t), ".")
-	if err != nil {
-		t.Fatalf("ReadDir(embedded): %v", err)
-	}
-	for _, e := range entries {
-		data, err := fs.ReadFile(agentsModules(t), e.Name())
-		if err != nil {
-			t.Fatalf("ReadFile(%s): %v", e.Name(), err)
-		}
-		writeFile(t, filepath.Join(dir, e.Name()), string(data))
-	}
-
-	fromDir, err := module.LoadDir(dir)
-	if err != nil {
-		t.Fatalf("LoadDir: %v", err)
-	}
-	if !reflect.DeepEqual(embedded, fromDir) {
-		t.Errorf("embedded set != --modules set\nembedded: %+v\ndir:      %+v", embedded, fromDir)
-	}
-
-	// And against the working tree's modules/ directory, which is what
-	// `--modules ../../modules` would load.
-	fromRepo, err := module.LoadDir(filepath.Join("..", "..", "modules"))
-	if err != nil {
-		t.Fatalf("LoadDir(repo modules): %v", err)
-	}
-	if !reflect.DeepEqual(embedded, fromRepo) {
-		t.Errorf("embedded set != repo modules/ set — the embed is stale")
-	}
-}
-
-// Every kind: file module in the repo's own modules/ loads once its path:
-// line is removed, and derives to project/agents/<name>.md.
+// The embedded example source carries one kind: file module, and its path is
+// derived rather than declared.
 func TestEmbeddedFileModulePaths(t *testing.T) {
-	set, err := module.Load(agentsModules(t))
+	set, err := module.Load(embeddedModules(t))
 	if err != nil {
 		t.Fatalf("Load(embedded): %v", err)
 	}

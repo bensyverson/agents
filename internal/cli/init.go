@@ -33,9 +33,10 @@ func initCmd() *cobra.Command {
 			"skipped, not repeated, if it is already done.\n\n" +
 			"--source names where the modules come from: a directory that exists is a path\n" +
 			"source, anything else a git URL, and the source is named after its last path\n" +
-			"segment. A git ref is resolved and the sha written into " + manifest.FileName + ". Without\n" +
-			"--source the modules built into the binary are used and no source is listed;\n" +
-			"more sources can be added to " + manifest.FileName + " by hand at any time.",
+			"segment. A git ref is resolved and the sha written into " + manifest.FileName + ". It\n" +
+			"requires --with, since only the source knows what it holds. Without --source\n" +
+			"the modules built into the binary are used and no source is listed; more\n" +
+			"sources can be added to " + manifest.FileName + " by hand at any time.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			opts, err := openOptions(repo.FetchMissing)
@@ -56,8 +57,16 @@ func initCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("locating the working directory: %w", err)
 			}
+			// The flag carries the defaults so `--help` names them, but init
+			// must know whether the caller actually said which modules it
+			// wants: with a --source of someone else's, the defaults are the
+			// wrong answer rather than a fallback.
+			var modules []string
+			if cmd.Flags().Changed(withFlag) {
+				modules = with
+			}
 			res, err := repo.Init(dir, repo.InitOptions{
-				Modules:      with,
+				Modules:      modules,
 				Source:       src,
 				Open:         opts,
 				RegistryPath: path,
@@ -77,7 +86,7 @@ func initCmd() *cobra.Command {
 	}
 	cmd.Flags().StringSliceVar(&with, withFlag, repo.DefaultModules(), "modules to render, in order")
 	cmd.Flags().StringVar(&spec, sourceFlag, "",
-		"git URL or directory holding modules/ and templates/; omitted, the binary's own modules are used")
+		"git URL or directory holding modules/ and templates/, and requires --with;\nomitted, the example modules built into the binary are used")
 	return cmd
 }
 

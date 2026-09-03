@@ -15,11 +15,18 @@ import (
 )
 
 // DefaultModules is what a repo gets when init is given no module list: the
-// universal rules, the principles, and the pre-launch stage.
-func DefaultModules() []string { return []string{"core", "principles", "stage-build"} }
+// two modules the binary embeds, which are the only ones a fresh install is
+// certain to have.
+func DefaultModules() []string { return []string{"agents", "module-authoring"} }
 
 // ErrNoSourceGiven means a source spec was empty.
 var ErrNoSourceGiven = errors.New("no source given")
+
+// ErrModulesRequired says init was given a source but no module list. The
+// defaults name the modules the binary embeds, so they mean nothing for
+// somebody else's source: which of its modules to enable is the caller's to
+// say, and guessing would render a manifest nobody asked for.
+var ErrModulesRequired = errors.New("--with is required with --source: name the modules to enable (its modules/*.md)")
 
 // ParseSource reads a source spec — what `agents init --source` takes. A spec
 // naming a directory that exists is a path source; anything else is a git URL,
@@ -47,7 +54,8 @@ func sourceName(spec string) string {
 // InitOptions is everything init needs from its caller; nothing is read from
 // the environment here, so tests never touch a real home directory.
 type InitOptions struct {
-	// Modules is the manifest to write; empty means DefaultModules.
+	// Modules is the manifest to write; empty means DefaultModules, and is
+	// ErrModulesRequired when Source names a source of someone else's.
 	Modules []string
 	// Source is the one source the new manifest names. The zero value writes
 	// no sources: block at all, so the repo renders from the source the binary
@@ -158,6 +166,9 @@ func sourceNames(sources []manifest.Source) string {
 func Init(dir string, opts InitOptions) (InitResult, error) {
 	modules := opts.Modules
 	if len(modules) == 0 {
+		if opts.Source.Name != "" {
+			return InitResult{Dir: dir, RegistryPath: opts.RegistryPath}, ErrModulesRequired
+		}
 		modules = DefaultModules()
 	}
 	res := InitResult{Dir: dir, Modules: modules, RegistryPath: opts.RegistryPath}

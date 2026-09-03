@@ -222,7 +222,7 @@ func TestListWorksOutsideAManagedRepo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list outside a managed repo: %v", err)
 	}
-	if !strings.Contains(stdout, "core") {
+	if !strings.Contains(stdout, "agents") {
 		t.Errorf("list printed no modules:\n%s", stdout)
 	}
 	if strings.Contains(stdout, "*") {

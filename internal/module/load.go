@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io/fs"
 	"maps"
-	"os"
 	"path"
 	"path/filepath"
 	"slices"
@@ -226,13 +225,4 @@ func Load(fsys fs.FS) (Set, error) {
 		byName[m.Name] = m
 	}
 	return Set{byName: byName}, nil
-}
-
-// LoadDir loads the modules in a directory on disk.
-func LoadDir(dir string) (Set, error) {
-	set, err := Load(os.DirFS(dir))
-	if err != nil {
-		return Set{}, fmt.Errorf("%s: %w", dir, err)
-	}
-	return set, nil
 }

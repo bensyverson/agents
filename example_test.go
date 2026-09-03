@@ -13,15 +13,11 @@ import (
 // region renders it verbatim, so a change here is a change to what agents read.
 const whenSituation = "Writing or editing an agents module"
 
-// exampleModules loads the example source's modules the way the repo layer
+// exampleModules loads the embedded source's modules the way the repo layer
 // does: through module.Load over the source's "modules" subtree.
 func exampleModules(t *testing.T) module.Set {
 	t.Helper()
-	sub, err := fs.Sub(Example(), "modules")
-	if err != nil {
-		t.Fatalf("modules subtree: %v", err)
-	}
-	set, err := module.Load(sub)
+	set, err := module.Load(Modules())
 	if err != nil {
 		t.Fatalf("loading example modules: %v", err)
 	}
@@ -29,7 +25,7 @@ func exampleModules(t *testing.T) module.Set {
 }
 
 func TestExampleSourceHoldsExactlyTwoModules(t *testing.T) {
-	entries, err := fs.ReadDir(Example(), "modules")
+	entries, err := fs.ReadDir(Embedded(), "modules")
 	if err != nil {
 		t.Fatalf("reading modules: %v", err)
 	}
@@ -47,7 +43,7 @@ func TestExampleSourceHoldsExactlyTwoModules(t *testing.T) {
 }
 
 func TestExampleSourceSeedsAHead(t *testing.T) {
-	head, err := fs.ReadFile(Example(), "templates/head.md")
+	head, err := fs.ReadFile(Embedded(), "templates/head.md")
 	if err != nil {
 		t.Fatalf("templates/head.md: %v", err)
 	}

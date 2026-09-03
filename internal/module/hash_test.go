@@ -33,22 +33,18 @@ func TestHashLength(t *testing.T) {
 	}
 }
 
-// TestEmbeddedModuleHashes is the dogfood contract with the rendered AGENTS.md
-// in this repo: these are the hashes in its region markers. Editing a module
-// changes its hash and fails this test on purpose — that is the signal to
-// re-render AGENTS.md (`agents sync` after `go install`) and update the table.
+// TestEmbeddedModuleHashes pins the example modules the binary ships. They are
+// what a fresh install renders and what the format documents itself with, so
+// editing one changes every region marker it has already written: this test
+// fails on purpose, and re-pinning it is how that edit is made deliberate.
 func TestEmbeddedModuleHashes(t *testing.T) {
-	set, err := module.Load(agentsModules(t))
+	set, err := module.Load(embeddedModules(t))
 	if err != nil {
 		t.Fatalf("Load(embedded): %v", err)
 	}
 	want := map[string]string{
-		"core":        "3a7a5e",
-		"principles":  "7a5b19",
-		"stage-build": "3d5d83",
-		"go":          "91ab6a",
-		"delegation":  "0a9536",
-		"evidence":    "2393e6",
+		"agents":           "556395",
+		"module-authoring": "503f5d",
 	}
 	for name, wantHash := range want {
 		m, ok := set.Get(name)

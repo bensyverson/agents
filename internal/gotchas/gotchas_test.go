@@ -17,13 +17,18 @@ func date(t *testing.T, s string) time.Time {
 	return d
 }
 
-// The seeded template is preamble only: it must parse to zero entries.
+// A seed template is preamble only — a heading, prose and the rule that closes
+// it — and a freshly seeded file must therefore parse to zero entries, so the
+// budget warning does not fire on a repo that has recorded nothing.
+const docTemplate = `# Gotchas
+
+Project-specific traps, one dated H2 headline and one paragraph each.
+
+---
+`
+
 func TestParseTemplateHasNoEntries(t *testing.T) {
-	content, err := os.ReadFile(filepath.Join("..", "..", "templates", "project", "gotchas.md"))
-	if err != nil {
-		t.Fatalf("read template: %v", err)
-	}
-	if got := Parse(string(content)).Entries; len(got) != 0 {
+	if got := Parse(docTemplate).Entries; len(got) != 0 {
 		t.Errorf("Parse(template) = %d entries, want 0: %+v", len(got), got)
 	}
 }

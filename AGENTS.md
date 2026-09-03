@@ -1,12 +1,12 @@
 ## Overview
 
-You are working on `agents`, a small Go CLI that renders shared house rules (the markdown modules in `modules/`) into marked regions of each repo's `AGENTS.md` and keeps them in sync. The modules are the product; the tool should stay small.
+You are working on `agents`, a small Go CLI that renders shared house rules — markdown **modules**, held in source repositories of their own — into marked regions of each repo's `AGENTS.md`, and keeps them in sync. The modules are the product; the tool should stay small.
 
 ## Documentation
 
 - [README.md](README.md) — what the tool is and how to start; [DOCS.md](DOCS.md) — the marker convention, module format and every verb
 - [project/](project/) — dated design documents; [project/2026-09-03-sources-and-situations.md](project/2026-09-03-sources-and-situations.md) is the current plan (sources and situational modules, umbrella `hZ0UQe`), [project/2026-08-28-practice-plan.md](project/2026-08-28-practice-plan.md) the previous one (umbrella `iZ7pQ`), [project/2026-08-28-practice-assessment.md](project/2026-08-28-practice-assessment.md) the assessment behind it, [project/2026-08-28-planning.md](project/2026-08-28-planning.md) how plans are written, [project/2026-08-16-plan.md](project/2026-08-16-plan.md) the v1 design, [project/2026-08-29-public-repo.md](project/2026-08-29-public-repo.md) the confidentiality ruling
-- [modules/](modules/) — the shared rules themselves; [templates/](templates/) — files seeded into managed repos
+- [github.com/bensyverson/agents-md](https://github.com/bensyverson/agents-md) — the first-party modules and the templates they seed, edited there and consumed here like any other source; [example/](example/) is the two-module example source the binary embeds
 
 ## Confidentiality
 

@@ -9,3 +9,7 @@ Project-specific traps that cost real time and that no general rule predicts. Re
 Format: one dated H2 per entry, a bold headline, then what happened and what to do instead.
 
 ---
+
+## 2026-09-03 — rule: `mktemp -d` on macOS ignores `$TMPDIR`
+
+**A bare `mktemp -d` is denied in the sandbox even though `$TMPDIR` is writable.** The harness rule says to use `$TMPDIR` for temporary files, but macOS `mktemp` with no template asks the OS for the per-user temp directory (`/var/folders/…`) and never reads `$TMPDIR`, so the call fails with `Operation not permitted` and reads like a broken install. Pass a template: `mktemp -d "${TMPDIR:-/tmp}/name.XXXXXX"`.

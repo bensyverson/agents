@@ -2,7 +2,7 @@
 
 Renders a shared set of house rules into each repo's `AGENTS.md`, and keeps them in sync.
 
-`AGENTS.md` (with `CLAUDE.md` symlinked to it) is read by every coding harness. Most of its content is the same across repos — working rules, stack rules, workflow modules — and used to be hand-copied, so edits drifted. This tool owns the shared parts as markdown **modules**, embeds them in the binary, and renders them into marked regions of each repo's `AGENTS.md`. Everything outside the markers belongs to the project.
+`AGENTS.md` (with `CLAUDE.md` symlinked to it) is read by every coding harness. Most of its content is the same across repos — working rules, stack rules, workflow modules — and used to be hand-copied, so edits drifted. This tool owns the shared parts as markdown **modules**, kept in **sources** — a git repository, a directory, or the example source the binary embeds — and renders them into marked regions of each repo's `AGENTS.md`. Everything outside the markers belongs to the project.
 
 ## Layout of a managed repo
 
@@ -10,7 +10,7 @@ Renders a shared set of house rules into each repo's `AGENTS.md`, and keeps them
 - `CLAUDE.md` — a symlink to `AGENTS.md`, created by `init` if absent
 - `.agents.yaml` — the manifest: which sources modules come from, and which modules, in what order
 - `project/gotchas.md` — project quirks and rule feedback, appended by agents, pruned by humans
-- `project/agents/*.md` — the modules too long to inline (`cli-design.md`, `delegation.md`, `design-process.md`, `evidence.md`, `harness.md`, `jobs.md`), one per `kind: file` module the repo enables
+- `project/agents/*.md` — the modules too long to inline, one file per `kind: file` module the repo enables, at the path derived from the module's name
 
 ## The marker convention
 
@@ -28,7 +28,7 @@ That holds in *every* rendered file, not just `AGENTS.md`: text above or below t
 
 ## Module format
 
-A module is a markdown file in `modules/`, optionally preceded by YAML frontmatter (a `---` block as the very first line):
+A module is a markdown file in a source's `modules/` directory, optionally preceded by YAML frontmatter (a `---` block as the very first line):
 
 ```
 ---
@@ -42,7 +42,7 @@ when: Before dispatching any subagent
 - `kind: inline` (the default) renders the module into its own marked region inside `AGENTS.md`, in manifest order.
 - `kind: file` renders the module to `project/agents/<name>.md` instead, as its own file holding a single whole-file region (the project may still write its own head above it, exactly as with `AGENTS.md`). The path is **derived from the name**, never declared: two file modules can therefore never collide on where they write, and a module referencing a sibling writes `project/agents/<name>.md` and knows it is right. A `path:` key is a load error naming the offending module — the key existed in v1 and is gone.
 - `when: <one situation phrase>` says when the file must be read — "Before dispatching any subagent". It is valid only with `kind: file` (`when:` on an inline module is a load error) and optional even there: a file module without it renders exactly as before and simply never appears in the index. The phrase is one row of the index table below, so write it as the condition an agent can match against, not as a description of the file.
-- `seeds: [project/gotchas.md, …]` lists repo-relative files the module wants every repo that enables it to have. Each is created from `templates/<seed path>` when it is missing, and never overwritten — a seeded file belongs to the repo the moment it exists. Valid on any kind; a path that is absolute or escapes the repo is an error, as is a declared seed with no template. `templates/head.md` is not a seed: the head is `init`'s own special case.
+- `seeds: [project/gotchas.md, …]` lists repo-relative files the module wants every repo that enables it to have. Each is created from `templates/<seed path>` in the module's own source when it is missing, and never overwritten — a seeded file belongs to the repo the moment it exists. Valid on any kind; a path that is absolute or escapes the repo is an error, as is a declared seed with no template. `templates/head.md` is not a seed: the head is `init`'s own special case.
 
 `index` is a **reserved module name**: the tool generates a region of that name itself (below), so a module file called `index.md` is a load error and `index` in `.agents.yaml` is an unknown module.
 
@@ -105,7 +105,7 @@ So on a **fresh machine**, one `agents sync` while online populates the cache; e
 
 | Verb | Flags | Does |
 |---|---|---|
-| `agents init` | `--with a,b,c` (default `core,principles,stage-build`), `--source <url-or-dir>` | Write `.agents.yaml` (naming the source, with a git ref resolved to the sha it pinned; with no `--source`, no `sources:` block at all and the embedded source), render `AGENTS.md` (an existing file becomes the project-owned head; with no file at all the head is seeded from `templates/head.md`), create any file the chosen modules seed (`core` seeds `project/gotchas.md`, `docs` seeds `project/backlog.md`, `background` seeds `project/background.md`), link `CLAUDE.md`, and register the repo. Every step is skipped, not repeated, if already done. Refuses the same way `sync` does if a region has been hand-edited. |
+| `agents init` | `--with a,b,c` (default `agents,module-authoring`, the two modules the binary embeds), `--source <url-or-dir>` | Write `.agents.yaml` (naming the source, with a git ref resolved to the sha it pinned; with no `--source`, no `sources:` block at all and the embedded source), render `AGENTS.md` (an existing file becomes the project-owned head; with no file at all the head is seeded from `templates/head.md`), create any file the chosen modules seed, link `CLAUDE.md`, and register the repo. `--source` requires `--with`: the defaults name the embedded example modules, which somebody else's source has no reason to hold, so a source with no module list is refused in one line rather than guessed at. Every step is skipped, not repeated, if already done. Refuses the same way `sync` does if a region has been hand-edited. |
 | `agents add <module>…` | — | Append each module to `.agents.yaml` in the order given, then render: an inline module's region lands after every region already in `AGENTS.md` and above whatever tail the project wrote, a `kind: file` module gets its file, and any file the new modules seed is created. A module the manifest already lists prints `<name> is already enabled` and is skipped. Nothing above the first region is touched. A hand-edited region stops the whole thing — nothing is written, the manifest included — exactly as `sync` does. |
 | `agents remove <module>…` | — | Drop each module from `.agents.yaml` and delete its region. A `kind: file` module's file goes too when the region was all it held; a file the project has written in keeps every one of its own bytes, loses only the region, and is named in a `kept …` line. Removing is a decision, not a sync: a region edited by hand since its render is removed anyway (and said so), and no other module's region is touched — except the generated `index`, which is rewritten (or deleted, with the last `when:` module) so it never names a file the repo no longer has. |
 | `agents list` | — | One line per module the repo's sources supply, sorted, qualified as `source/name` where the module does not come from the default source, with `*` on the ones `.agents.yaml` lists and the derived `project/agents/<name>.md` path of every `kind: file` module. The one verb that runs outside a managed repo: there it lists what the embedded source could give you and marks nothing. |
@@ -121,11 +121,13 @@ There is no `--modules <dir>` flag: iterating on a module without reinstalling i
 
 ## Adding or editing a module
 
-Edit `modules/<name>.md` (add YAML frontmatter only if it needs `kind: file`), then `make sync` — it runs `go install ./cmd/agents` (the installed binary's embedded modules *are* the published standard), re-renders every registered repo with `agents sync --all`, and prints `agents status --all`. Each repo then needs its own commit. `make status` shows what's stale without changing anything; `make diff` prints the review queue. That is the shared text; which modules a given repo *enables* is `agents add <name>` / `agents remove <name>` in that repo, and `agents list` shows both. After cloning, `make hooks` points git at `scripts/git-hooks`. The pre-commit hook runs the Go checks and `agents check`, so a commit that would leave this repo's own `AGENTS.md` stale is refused; the post-commit hook runs `make sync`, so a module commit re-renders every registered repo before their own hooks can complain. A managed repo's hook is never written by the tool — `agents status` only names the file and the line to paste.
+A module is edited in the source that holds it, not here. For the first-party rules that is [bensyverson/agents-md](https://github.com/bensyverson/agents-md): edit `modules/<name>.md` there (add YAML frontmatter only if it needs `kind: file`), then `make sync` in that checkout — it re-renders every registered repo with `agents sync --all` and prints `agents status --all`, and its post-commit hook does the same after a commit. Each repo then needs its own commit. `make status` there shows what's stale without changing anything; `make diff` prints the review queue. A repo whose source is pinned to a git sha sees none of that until `agents update` moves the pin, which is the point of the pin.
+
+That is the shared text; which modules a given repo *enables* is `agents add <name>` / `agents remove <name>` in that repo, and `agents list` shows both. In this repo, `make hooks` points git at `scripts/git-hooks` after a clone; the pre-commit hook runs the Go checks and `agents check`, so a commit that would leave this repo's own `AGENTS.md` stale is refused. A managed repo's hook is never written by the tool — `agents status` only names the file and the line to paste.
 
 ## Gotchas
 
-`project/gotchas.md` is a checked-in, agent-appendable list of project-specific traps, seeded from `templates/project/gotchas.md` because `core` declares it (see `seeds:` above). Its format, quoting that template:
+`project/gotchas.md` is a checked-in, agent-appendable list of project-specific traps, seeded from its source's `templates/project/gotchas.md` because a module declares it (see `seeds:` above). Its format, quoting that template:
 
 > Format: one dated H2 headline, then one paragraph. If an entry needs more than that, it's a finding — write it as a dated doc under `project/` and link it from the paragraph.
 
@@ -137,7 +139,7 @@ The preamble above the file's first `---` belongs to the template, and the entri
 
 ## The review loop
 
-`agents diff --all` is the queue for changing the shared rules: it walks every registered repo and prints every hand-edit an agent or human made inside a generated region, plus every `rule:` gotcha, so you can decide what belongs in `modules/` instead of one repo's `AGENTS.md`. `agents sync` refuses to overwrite a hand-edited region without `--force`, so nothing in that queue is lost to a routine sync.
+`agents diff --all` is the queue for changing the shared rules: it walks every registered repo and prints every hand-edit an agent or human made inside a generated region, plus every `rule:` gotcha, so you can decide what belongs in a source's `modules/` instead of one repo's `AGENTS.md`. `agents sync` refuses to overwrite a hand-edited region without `--force`, so nothing in that queue is lost to a routine sync.
 
 ## Docs
 

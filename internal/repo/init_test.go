@@ -11,8 +11,14 @@ import (
 	"github.com/bensyverson/agents/internal/registry"
 )
 
+// initOptions renders from the test source, whose modules are core,
+// principles and stage-build — not the ones the binary embeds, which is what
+// DefaultModules names. A caller that passes none means that trio.
 func initOptions(t *testing.T, modules ...string) InitOptions {
 	t.Helper()
+	if len(modules) == 0 {
+		modules = testSourceModules()
+	}
 	return InitOptions{
 		Modules:      modules,
 		Open:         testOptions(),
@@ -20,15 +26,42 @@ func initOptions(t *testing.T, modules ...string) InitOptions {
 	}
 }
 
+// testSourceModules is every module the test source holds, in render order.
+func testSourceModules() []string { return []string{"core", "principles", "stage-build"} }
+
 // defaultRegions is what the default module list renders to in AGENTS.md.
 func defaultRegions() string {
 	return fresh("core", coreBody) + "\n" + fresh("principles", principlesBody) + "\n" + fresh("stage-build", stageBody)
 }
 
+// The defaults are the modules the binary embeds — the example source — since
+// they are the only ones a fresh install is certain to have.
 func TestDefaultModules(t *testing.T) {
-	want := []string{"core", "principles", "stage-build"}
+	want := []string{"agents", "module-authoring"}
 	if !reflect.DeepEqual(DefaultModules(), want) {
 		t.Errorf("DefaultModules() = %v, want %v", DefaultModules(), want)
+	}
+}
+
+// A source and no module list is a refusal, not a guess: the defaults name the
+// embedded example modules, which a foreign source has no reason to hold.
+func TestInitWithASourceRequiresAModuleList(t *testing.T) {
+	dir := t.TempDir()
+
+	_, err := Init(dir, InitOptions{
+		Source:       manifest.Source{Name: "house", Path: t.TempDir()},
+		Open:         testOptions(),
+		RegistryPath: filepath.Join(t.TempDir(), "repos"),
+	})
+
+	if err == nil {
+		t.Fatal("Init with a source and no module list returned a nil error")
+	}
+	if got := err.Error(); got != ErrModulesRequired.Error() {
+		t.Errorf("error = %q, want %q", got, ErrModulesRequired)
+	}
+	if fileExists(t, dir, manifest.FileName) {
+		t.Errorf("Init wrote %s despite refusing", manifest.FileName)
 	}
 }
 

@@ -30,26 +30,62 @@ func readFile(t *testing.T, path string) string {
 	return string(b)
 }
 
-// With no --source, init writes no sources: block, renders from the modules
-// the binary carries, and says where other sources go.
+// With neither --source nor --with, init writes no sources: block, enables the
+// two modules the binary carries, and says where other sources go.
 func TestInitWithNoSourceUsesTheEmbeddedModules(t *testing.T) {
 	dir := emptyRepo(t)
 
-	stdout, stderr, err := run(t, "init", "--with", "core")
+	stdout, stderr, err := run(t, "init")
 	if err != nil {
 		t.Fatalf("init: %v (stderr %s)", err, stderr)
 	}
 
 	written := readFile(t, filepath.Join(dir, manifest.FileName))
-	if strings.Contains(written, "sources:") {
-		t.Errorf("%s names a source:\n%s", manifest.FileName, written)
+	if want := "modules:\n  - agents\n  - module-authoring\n"; written != want {
+		t.Errorf("%s:\n got %q\nwant %q", manifest.FileName, written, want)
 	}
-	if !strings.Contains(readFile(t, filepath.Join(dir, "AGENTS.md")), "agents:begin core@") {
-		t.Errorf("AGENTS.md holds no core region:\n%s", readFile(t, filepath.Join(dir, "AGENTS.md")))
+	if !strings.Contains(readFile(t, filepath.Join(dir, "AGENTS.md")), "agents:begin agents@") {
+		t.Errorf("AGENTS.md holds no agents region:\n%s", readFile(t, filepath.Join(dir, "AGENTS.md")))
 	}
 	// One line saying which source was used and where to name others.
 	if !strings.Contains(stdout, "built into the binary") || !strings.Contains(stdout, manifest.FileName) {
 		t.Errorf("init did not say it used the embedded source:\n%s", stdout)
+	}
+}
+
+// The defaults name the embedded example modules, so they are meaningless for
+// a source of someone else's: --source without --with is one line of refusal,
+// and nothing is written.
+func TestInitWithASourceRequiresWith(t *testing.T) {
+	dir := emptyRepo(t)
+	sourceDir := newSource(t, sourceName, map[string]string{"modules/core.md": coreBody})
+
+	stdout, _, err := run(t, "init", "--source", sourceDir)
+
+	if err == nil {
+		t.Fatal("init --source with no --with returned a nil error")
+	}
+	const want = "--with is required with --source: name the modules to enable (its modules/*.md)"
+	if err.Error() != want {
+		t.Errorf("error = %q, want %q", err, want)
+	}
+	if stdout != "" {
+		t.Errorf("init printed %q, want the failure on stderr alone", stdout)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, manifest.FileName)); statErr == nil {
+		t.Errorf("init wrote %s despite refusing", manifest.FileName)
+	}
+}
+
+// The help text must name the defaults, since they are what init uses when the
+// flag is absent.
+func TestInitHelpNamesTheDefaultModules(t *testing.T) {
+	stdout, _, err := run(t, "init", "--help")
+	if err != nil {
+		t.Fatalf("init --help: %v", err)
+	}
+	if !strings.Contains(stdout, "agents,module-authoring") {
+		t.Errorf("init --help does not name the default modules:\n%s", stdout)
 	}
 }
 
