@@ -268,7 +268,7 @@ func TestSyncPreservesFileTargetTail(t *testing.T) {
 	// Now the module moves: the region is rewritten, the tail is not.
 	newBody := delegationBody + "\nand one more rule\n"
 	set, err := module.Load(fstest.MapFS{
-		"delegation.md": &fstest.MapFile{Data: []byte("---\nkind: file\npath: " + delegationPath + "\n---\n" + newBody)},
+		"delegation.md": &fstest.MapFile{Data: []byte("---\nkind: file\n---\n" + newBody)},
 	})
 	if err != nil {
 		t.Fatalf("module.Load: %v", err)

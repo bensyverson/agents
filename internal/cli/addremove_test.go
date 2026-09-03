@@ -13,7 +13,7 @@ const (
 	// remove has one to delete.
 	delegationPath   = "project/agents/delegation.md"
 	delegationBody   = "# Delegating\n\nrules\n"
-	delegationModule = "---\nkind: file\npath: " + delegationPath + "\n---\n" + delegationBody
+	delegationModule = "---\nkind: file\n---\n" + delegationBody
 )
 
 // writeModule adds a module to the --modules directory a fixture built.

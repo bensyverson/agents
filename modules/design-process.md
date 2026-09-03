@@ -1,6 +1,5 @@
 ---
 kind: file
-path: project/agents/design-process.md
 ---
 
 # Design process

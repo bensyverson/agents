@@ -1,6 +1,5 @@
 ---
 kind: file
-path: project/agents/evidence.md
 ---
 # Working with evidence
 

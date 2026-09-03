@@ -17,6 +17,11 @@ import (
 // Extension is the file extension of a module file; the name is the rest.
 const Extension = ".md"
 
+// FileDir is the directory every KindFile module renders under. A module's
+// render path is always FileDir/<name>.md — never a frontmatter key — so two
+// file modules can never collide on where they write.
+const FileDir = "project/agents"
+
 // delimiter opens and closes the frontmatter block.
 const delimiter = "---"
 
@@ -24,8 +29,8 @@ const delimiter = "---"
 var (
 	ErrUnterminatedFrontmatter = errors.New("frontmatter is never closed")
 	ErrUnknownKind             = errors.New("unknown kind")
-	ErrPathRequired            = errors.New("kind: file requires a path")
-	ErrPathNotAllowed          = errors.New("path is only valid on kind: file")
+	ErrPathNotAllowed          = errors.New("path is derived from the module's name; remove the path key")
+	ErrWhenNotAllowed          = errors.New("when is only valid on kind: file")
 	ErrEmptyBody               = errors.New("module has no body")
 	ErrSeedPathInvalid         = errors.New("seed path must be relative to the repo")
 )
@@ -42,10 +47,13 @@ func (k Kind) String() string {
 	}
 }
 
-// frontmatter is the wire shape of a module's optional YAML header.
+// frontmatter is the wire shape of a module's optional YAML header. Path is
+// decoded only so a stray path: key can be rejected by name; it never
+// becomes Module.Path.
 type frontmatter struct {
 	Kind  string   `yaml:"kind"`
 	Path  string   `yaml:"path"`
+	When  string   `yaml:"when"`
 	Seeds []string `yaml:"seeds"`
 }
 
@@ -69,6 +77,9 @@ func Parse(name, raw string) (Module, error) {
 		body += "\n"
 	}
 	m.Name, m.Body, m.Hash = name, body, Hash(body)
+	if m.Kind == KindFile {
+		m.Path = path.Join(FileDir, name+Extension)
+	}
 	return m, nil
 }
 
@@ -127,17 +138,17 @@ func parseFrontmatter(front string) (Module, error) {
 	}
 
 	switch {
-	case kind == KindFile && fm.Path == "":
-		return Module{}, ErrPathRequired
-	case kind == KindInline && fm.Path != "":
+	case fm.Path != "":
 		return Module{}, fmt.Errorf("%w: %q", ErrPathNotAllowed, fm.Path)
+	case kind == KindInline && fm.When != "":
+		return Module{}, fmt.Errorf("%w: %q", ErrWhenNotAllowed, fm.When)
 	}
 
 	seeds, err := cleanSeeds(fm.Seeds)
 	if err != nil {
 		return Module{}, err
 	}
-	return Module{Kind: kind, Path: fm.Path, Seeds: seeds}, nil
+	return Module{Kind: kind, When: fm.When, Seeds: seeds}, nil
 }
 
 // cleanSeeds normalises each declared seed and refuses any that would write

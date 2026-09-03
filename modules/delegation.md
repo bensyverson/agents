@@ -1,6 +1,5 @@
 ---
 kind: file
-path: project/agents/delegation.md
 ---
 # Delegating to subagents
 

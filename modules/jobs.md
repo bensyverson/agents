@@ -1,6 +1,5 @@
 ---
 kind: file
-path: project/agents/jobs.md
 ---
 # Working in `job`
 

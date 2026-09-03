@@ -61,7 +61,7 @@ func testSet(t *testing.T) module.Set {
 		"principles.md":  &fstest.MapFile{Data: []byte(principlesBody)},
 		"stage-build.md": &fstest.MapFile{Data: []byte(stageBody)},
 		"docs.md":        &fstest.MapFile{Data: []byte("---\nseeds: [" + backlogFile + "]\n---\n" + docsBody)},
-		"delegation.md":  &fstest.MapFile{Data: []byte("---\nkind: file\npath: " + delegationPath + "\n---\n" + delegationBody)},
+		"delegation.md":  &fstest.MapFile{Data: []byte("---\nkind: file\n---\n" + delegationBody)},
 	})
 	if err != nil {
 		t.Fatalf("module.Load: %v", err)

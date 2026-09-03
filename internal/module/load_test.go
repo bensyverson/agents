@@ -43,7 +43,7 @@ func TestParseWithoutFrontmatter(t *testing.T) {
 }
 
 func TestParseFileFrontmatter(t *testing.T) {
-	raw := "---\nkind: file\npath: project/agents/delegation.md\n---\n# Delegating\n\nBody.\n"
+	raw := "---\nkind: file\n---\n# Delegating\n\nBody.\n"
 	m, err := module.Parse("delegation", raw)
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
@@ -52,13 +52,57 @@ func TestParseFileFrontmatter(t *testing.T) {
 		t.Errorf("Kind = %v, want KindFile", m.Kind)
 	}
 	if want := "project/agents/delegation.md"; m.Path != want {
-		t.Errorf("Path = %q, want %q", m.Path, want)
+		t.Errorf("Path = %q, want %q (derived from the name)", m.Path, want)
 	}
 	if want := "# Delegating\n\nBody.\n"; m.Body != want {
 		t.Errorf("Body = %q, want %q", m.Body, want)
 	}
 	if want := module.Hash("# Delegating\n\nBody.\n"); m.Hash != want {
 		t.Errorf("Hash = %q, want %q — the frontmatter must be excluded", m.Hash, want)
+	}
+}
+
+// Path is derived from the module's name, not read from frontmatter: two
+// different names must yield two different paths under FileDir.
+func TestParseDerivesPathFromName(t *testing.T) {
+	tests := []struct{ name, want string }{
+		{"delegation", "project/agents/delegation.md"},
+		{"cli-design", "project/agents/cli-design.md"},
+	}
+	for _, tt := range tests {
+		m, err := module.Parse(tt.name, "---\nkind: file\n---\nBody.\n")
+		if err != nil {
+			t.Fatalf("Parse(%q): %v", tt.name, err)
+		}
+		if m.Path != tt.want {
+			t.Errorf("Parse(%q).Path = %q, want %q", tt.name, m.Path, tt.want)
+		}
+	}
+}
+
+// A file module is valid with no when: at all — it just won't appear in the
+// index later.
+func TestParseFileModuleWithoutWhen(t *testing.T) {
+	m, err := module.Parse("x", "---\nkind: file\n---\nBody.\n")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if m.When != "" {
+		t.Errorf("When = %q, want empty", m.When)
+	}
+}
+
+func TestParseWhenOnFileModule(t *testing.T) {
+	raw := "---\nkind: file\nwhen: Before dispatching any subagent\n---\nBody.\n"
+	m, err := module.Parse("delegation", raw)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if want := "Before dispatching any subagent"; m.When != want {
+		t.Errorf("When = %q, want %q", m.When, want)
+	}
+	if want := "project/agents/delegation.md"; m.Path != want {
+		t.Errorf("Path = %q, want %q", m.Path, want)
 	}
 }
 
@@ -154,7 +198,7 @@ func TestParseSeeds(t *testing.T) {
 
 // Seeds are valid on any kind: a file module may carry a template too.
 func TestParseSeedsOnFileModule(t *testing.T) {
-	raw := "---\nkind: file\npath: project/agents/jobs.md\nseeds:\n  - project/backlog.md\n---\n# Jobs\n"
+	raw := "---\nkind: file\nseeds:\n  - project/backlog.md\n---\n# Jobs\n"
 	m, err := module.Parse("jobs", raw)
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
@@ -185,9 +229,11 @@ func TestParseErrors(t *testing.T) {
 	}{
 		{"unterminated frontmatter", "---\nkind: file\npath: a.md\n", module.ErrUnterminatedFrontmatter},
 		{"unknown frontmatter key", "---\nkind: inline\nnope: 1\n---\nBody.\n", nil},
-		{"file without path", "---\nkind: file\n---\nBody.\n", module.ErrPathRequired},
 		{"path on an inline module", "---\npath: project/agents/x.md\n---\nBody.\n", module.ErrPathNotAllowed},
 		{"explicit inline with a path", "---\nkind: inline\npath: x.md\n---\nBody.\n", module.ErrPathNotAllowed},
+		{"path on a file module", "---\nkind: file\npath: project/agents/x.md\n---\nBody.\n", module.ErrPathNotAllowed},
+		{"when on an inline module", "---\nwhen: Before doing X\n---\nBody.\n", module.ErrWhenNotAllowed},
+		{"when on an explicit inline module", "---\nkind: inline\nwhen: Before doing X\n---\nBody.\n", module.ErrWhenNotAllowed},
 		{"unknown kind", "---\nkind: sideways\n---\nBody.\n", module.ErrUnknownKind},
 		{"empty body", "", module.ErrEmptyBody},
 		{"whitespace-only body", "\n\n  \n", module.ErrEmptyBody},
@@ -216,7 +262,7 @@ func testFS() fstest.MapFS {
 	return fstest.MapFS{
 		"core.md":        &fstest.MapFile{Data: []byte("## Working rules\n")},
 		"principles.md":  &fstest.MapFile{Data: []byte("## Principles\n")},
-		"delegation.md":  &fstest.MapFile{Data: []byte("---\nkind: file\npath: project/agents/delegation.md\n---\n# Delegating\n")},
+		"delegation.md":  &fstest.MapFile{Data: []byte("---\nkind: file\n---\n# Delegating\n")},
 		"README.txt":     &fstest.MapFile{Data: []byte("not a module\n")},
 		"notes/extra.md": &fstest.MapFile{Data: []byte("nested, ignored\n")},
 	}
@@ -338,6 +384,29 @@ func TestEmbeddedAndDirAgree(t *testing.T) {
 	}
 	if !reflect.DeepEqual(embedded, fromRepo) {
 		t.Errorf("embedded set != repo modules/ set — the embed is stale")
+	}
+}
+
+// Every kind: file module in the repo's own modules/ loads once its path:
+// line is removed, and derives to project/agents/<name>.md.
+func TestEmbeddedFileModulePaths(t *testing.T) {
+	set, err := module.Load(agentsModules(t))
+	if err != nil {
+		t.Fatalf("Load(embedded): %v", err)
+	}
+	found := false
+	for _, name := range set.Names() {
+		m, _ := set.Get(name)
+		if m.Kind != module.KindFile {
+			continue
+		}
+		found = true
+		if want := module.FileDir + "/" + name + module.Extension; m.Path != want {
+			t.Errorf("module %q Path = %q, want %q", name, m.Path, want)
+		}
+	}
+	if !found {
+		t.Fatal("no kind: file module found in the embedded set")
 	}
 }
 

@@ -17,8 +17,14 @@ type Module struct {
 	// Name is the file name without ".md" and the token used in markers and .agents.yaml.
 	Name string
 	Kind Kind
-	// Path is the repo-relative render target; set only for KindFile.
+	// Path is the repo-relative render target, derived from Name as
+	// FileDir/<name>.md; set only for KindFile.
 	Path string
+	// When is the one-phrase situation a KindFile module must be read in
+	// (e.g. "Before dispatching any subagent"). Optional even on KindFile —
+	// a file module without it simply doesn't appear in the index — and
+	// invalid on KindInline.
+	When string
 	// Seeds are repo-relative files the module wants a managed repo to have.
 	// Each is created from templates/<seed> when it is missing, and never
 	// overwritten: once it exists it is the repo's own. Valid on any kind.

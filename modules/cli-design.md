@@ -1,6 +1,5 @@
 ---
 kind: file
-path: project/agents/cli-design.md
 ---
 # CLI design for agents
 
