@@ -101,7 +101,15 @@ func Init(dir string, opts InitOptions) (InitResult, error) {
 	}
 	res := InitResult{Dir: dir, Modules: modules, RegistryPath: opts.RegistryPath}
 
-	wanted := manifest.Manifest{Modules: modules}
+	refs := make([]manifest.ModuleRef, 0, len(modules))
+	for _, name := range modules {
+		ref, err := manifest.ParseRef(name)
+		if err != nil {
+			return res, fmt.Errorf("%s: %w", dir, err)
+		}
+		refs = append(refs, ref)
+	}
+	wanted := manifest.Manifest{Modules: refs}
 	if _, err := manifest.Marshal(wanted); err != nil {
 		return res, err
 	}
@@ -149,8 +157,8 @@ func writeManifest(dir string, wanted manifest.Manifest) (bool, error) {
 	existing, err := manifest.Read(path)
 	switch {
 	case err == nil:
-		if !slices.Equal(existing.Modules, wanted.Modules) {
-			return false, &ManifestConflictError{Dir: dir, Existing: existing.Modules, Requested: wanted.Modules}
+		if !slices.Equal(existing.Entries(), wanted.Entries()) {
+			return false, &ManifestConflictError{Dir: dir, Existing: existing.Entries(), Requested: wanted.Entries()}
 		}
 		return false, nil
 	case !errors.Is(err, fs.ErrNotExist):

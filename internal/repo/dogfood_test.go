@@ -32,14 +32,14 @@ func TestDogfoodThisRepo(t *testing.T) {
 	}
 	// A kind:file module renders to its own file; the fixture needs those
 	// too, or the render would legitimately write them.
-	for _, name := range m.Modules {
-		if mod, ok := set.Get(name); ok && mod.Kind == module.KindFile {
+	for _, ref := range m.Modules {
+		if mod, ok := set.Get(ref.Name); ok && mod.Kind == module.KindFile {
 			writeFixture(t, dir, mod.Path, readFile(t, filepath.Join(root, mod.Path)))
 		}
 	}
 
 	res, err := Init(dir, InitOptions{
-		Modules:      m.Modules,
+		Modules:      m.Entries(),
 		Set:          set,
 		Templates:    agents.Templates(),
 		RegistryPath: filepath.Join(t.TempDir(), "repos"),

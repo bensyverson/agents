@@ -182,8 +182,8 @@ func TestIndexIsNotAManifestEntry(t *testing.T) {
 	if !errors.As(err, &unknown) {
 		t.Fatalf("got %v, want *manifest.UnknownModulesError", err)
 	}
-	if len(unknown.Names) != 1 || unknown.Names[0] != indexRegion {
-		t.Errorf("Names = %v, want [index]", unknown.Names)
+	if len(unknown.Refs) != 1 || unknown.Refs[0].Name != indexRegion {
+		t.Errorf("Refs = %v, want [index]", unknown.Refs)
 	}
 }
 

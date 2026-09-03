@@ -51,7 +51,7 @@ func (r Report) any(pred func(render.Report) bool) bool {
 // other.
 type Status struct {
 	Dir string
-	// Modules are the manifest's module names, in order.
+	// Modules are the manifest's entries in file form, in order.
 	Modules      []string
 	StaleCount   int
 	EditedCount  int
@@ -82,7 +82,7 @@ func (r *Repo) Status() (Status, error) {
 	if err != nil {
 		return Status{}, err
 	}
-	st := Status{Dir: r.Dir, Modules: r.Manifest.Modules}
+	st := Status{Dir: r.Dir, Modules: r.Manifest.Entries()}
 	for _, t := range rep.Targets {
 		if t.Path == AgentsFile {
 			if st.HeadLines, err = headLines(t.Current); err != nil {

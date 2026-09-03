@@ -64,7 +64,7 @@ func TestOpen(t *testing.T) {
 		t.Fatalf("Modules = %v, want %v", r.Manifest.Modules, want)
 	}
 	for i, name := range want {
-		if r.Manifest.Modules[i] != name {
+		if r.Manifest.Modules[i].Name != name {
 			t.Errorf("Modules[%d] = %q, want %q", i, r.Manifest.Modules[i], name)
 		}
 	}

@@ -56,5 +56,5 @@ func EnabledModules(dir string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return m.Modules, nil
+	return m.Entries(), nil
 }

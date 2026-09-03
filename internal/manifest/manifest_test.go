@@ -17,6 +17,16 @@ import (
 // checked into this repo's root.
 const canonical = "modules:\n  - core\n  - principles\n  - stage-build\n  - go\n"
 
+// exampleRefs are the module entries a manifest with no sources: block parses
+// to: every bare name comes from the implicit example source.
+func exampleRefs(names ...string) []manifest.ModuleRef {
+	refs := make([]manifest.ModuleRef, len(names))
+	for i, name := range names {
+		refs[i] = manifest.ModuleRef{Source: manifest.ExampleSource, Name: name}
+	}
+	return refs
+}
+
 func TestFileName(t *testing.T) {
 	if manifest.FileName != ".agents.yaml" {
 		t.Errorf("FileName = %q, want %q", manifest.FileName, ".agents.yaml")
@@ -28,7 +38,7 @@ func TestParse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	want := []string{"core", "principles", "stage-build", "go"}
+	want := exampleRefs("core", "principles", "stage-build", "go")
 	if !reflect.DeepEqual(m.Modules, want) {
 		t.Errorf("Modules = %v, want %v (manifest order preserved)", m.Modules, want)
 	}
@@ -39,7 +49,7 @@ func TestParseAcceptsFlowAndInlineForms(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	want := []string{"core", "web3", "stage-build"}
+	want := exampleRefs("core", "web3", "stage-build")
 	if !reflect.DeepEqual(m.Modules, want) {
 		t.Errorf("Modules = %v, want %v", m.Modules, want)
 	}
@@ -90,7 +100,7 @@ func TestParseErrorNamesTheOffender(t *testing.T) {
 }
 
 func TestMarshalCanonicalForm(t *testing.T) {
-	got, err := manifest.Marshal(manifest.Manifest{Modules: []string{"core", "principles", "stage-build", "go"}})
+	got, err := manifest.Marshal(manifest.Manifest{Modules: exampleRefs("core", "principles", "stage-build", "go")})
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
@@ -103,7 +113,7 @@ func TestMarshalRejectsInvalid(t *testing.T) {
 	if _, err := manifest.Marshal(manifest.Manifest{}); !errors.Is(err, manifest.ErrNoModules) {
 		t.Errorf("Marshal(empty) error = %v, want ErrNoModules", err)
 	}
-	if _, err := manifest.Marshal(manifest.Manifest{Modules: []string{"core", "core"}}); !errors.Is(err, manifest.ErrDuplicateModule) {
+	if _, err := manifest.Marshal(manifest.Manifest{Modules: exampleRefs("core", "core")}); !errors.Is(err, manifest.ErrDuplicateModule) {
 		t.Errorf("Marshal(dupes) error = %v, want ErrDuplicateModule", err)
 	}
 }
@@ -145,7 +155,7 @@ func TestRoundTripRepoManifest(t *testing.T) {
 
 func TestWriteThenRead(t *testing.T) {
 	path := filepath.Join(t.TempDir(), manifest.FileName)
-	want := manifest.Manifest{Modules: []string{"core", "go"}}
+	want := manifest.Manifest{Modules: exampleRefs("core", "go")}
 	if err := manifest.Write(path, want); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
@@ -210,7 +220,7 @@ func testSet(t *testing.T) module.Set {
 }
 
 func TestResolveKeepsManifestOrder(t *testing.T) {
-	m := manifest.Manifest{Modules: []string{"go", "core", "principles"}}
+	m := manifest.Manifest{Modules: exampleRefs("go", "core", "principles")}
 	got, err := manifest.Resolve(m, testSet(t))
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
@@ -219,8 +229,8 @@ func TestResolveKeepsManifestOrder(t *testing.T) {
 	for _, mod := range got {
 		names = append(names, mod.Name)
 	}
-	if !reflect.DeepEqual(names, m.Modules) {
-		t.Errorf("Resolve = %v, want %v", names, m.Modules)
+	if want := m.Entries(); !reflect.DeepEqual(names, want) {
+		t.Errorf("Resolve = %v, want %v", names, want)
 	}
 	if got[0].Body != "## Go\n" {
 		t.Errorf("first module body = %q, want the loaded module", got[0].Body)
@@ -228,7 +238,7 @@ func TestResolveKeepsManifestOrder(t *testing.T) {
 }
 
 func TestResolveListsEveryUnknownName(t *testing.T) {
-	m := manifest.Manifest{Modules: []string{"core", "nope", "go", "alsonope"}}
+	m := manifest.Manifest{Modules: exampleRefs("core", "nope", "go", "alsonope")}
 	_, err := manifest.Resolve(m, testSet(t))
 	if err == nil {
 		t.Fatal("Resolve = nil error, want one")
@@ -242,7 +252,7 @@ func TestResolveListsEveryUnknownName(t *testing.T) {
 	if !errors.As(err, &unknown) {
 		t.Fatalf("error = %v, want an *UnknownModulesError", err)
 	}
-	if want := []string{"nope", "alsonope"}; !reflect.DeepEqual(unknown.Names, want) {
-		t.Errorf("UnknownModulesError.Names = %v, want %v (manifest order)", unknown.Names, want)
+	if want := exampleRefs("nope", "alsonope"); !reflect.DeepEqual(unknown.Refs, want) {
+		t.Errorf("UnknownModulesError.Refs = %v, want %v (manifest order)", unknown.Refs, want)
 	}
 }

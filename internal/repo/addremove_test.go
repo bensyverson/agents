@@ -43,8 +43,8 @@ func wantManifest(t *testing.T, dir string, names ...string) {
 	if err != nil {
 		t.Fatalf("reading manifest: %v", err)
 	}
-	if strings.Join(m.Modules, ",") != strings.Join(names, ",") {
-		t.Errorf("manifest = %v, want %v", m.Modules, names)
+	if strings.Join(m.Entries(), ",") != strings.Join(names, ",") {
+		t.Errorf("manifest = %v, want %v", m.Entries(), names)
 	}
 }
 

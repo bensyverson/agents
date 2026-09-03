@@ -27,10 +27,10 @@ func TestDogfoodAgentsMD(t *testing.T) {
 		t.Fatalf("module.LoadDir: %v", err)
 	}
 	var mods []module.Module
-	for _, name := range m.Modules {
-		mod, ok := set.Get(name)
+	for _, ref := range m.Modules {
+		mod, ok := set.Get(ref.Name)
 		if !ok {
-			t.Fatalf("manifest names %q, which modules/ lacks", name)
+			t.Fatalf("manifest names %q, which modules/ lacks", ref)
 		}
 		if mod.Kind == module.KindInline {
 			mods = append(mods, mod)

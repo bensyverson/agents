@@ -393,3 +393,6 @@
 {"v":1,"rep":"RQqyVj","seq":393,"ts":1788449997702,"actor":"index-agent","type":"criterion_state","task":"KupXdJ","data":{"label":"check reports the index region as stale when a when: phrase changes and hand-edited when its body is edited","state":"passed","prior":"pending","short_id":"Awf"}}
 {"v":1,"rep":"RQqyVj","seq":394,"ts":1788449997711,"actor":"index-agent","type":"criterion_state","task":"KupXdJ","data":{"label":"index in .agents.yaml is an unknown-module error","state":"passed","prior":"pending","short_id":"4co"}}
 {"v":1,"rep":"RQqyVj","seq":395,"ts":1788450011851,"actor":"index-agent","type":"released","task":"KupXdJ","data":{"was_claimed_by":"index-agent","was_expires_at":1788451797}}
+{"v":1,"rep":"RQqyVj","seq":396,"ts":1788450083010,"actor":"claude","type":"done","task":"KupXdJ","data":{"note":"Integrated as a squash of wt/index; suite green.","cascade":false,"was_status":"available"}}
+{"v":1,"rep":"RQqyVj","seq":397,"ts":1788450083011,"actor":"claude","type":"unblocked","task":"qjXueo","data":{"blocked_id":"qjXueo","blocker_id":"KupXdJ","reason":"blocker_done"}}
+{"v":1,"rep":"RQqyVj","seq":398,"ts":1788450083012,"actor":"claude","type":"done","task":"4VjAZT","data":{"was_status":"available","auto_closed":true,"trigger_kind":"done","triggered_by":"KupXdJ","cascade_status":"done"}}

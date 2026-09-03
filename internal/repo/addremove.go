@@ -65,13 +65,14 @@ func (r *Repo) Add(names []string) (AddResult, error) {
 	)
 	modules := slices.Clone(r.Manifest.Modules)
 	for _, name := range names {
+		ref, err := r.Manifest.Ref(name)
 		switch {
-		case !r.knows(name):
+		case err != nil || !r.knows(ref.Name):
 			unknown = append(unknown, name)
-		case slices.Contains(modules, name):
+		case slices.Contains(modules, ref):
 			res.Already = append(res.Already, name)
 		default:
-			modules = append(modules, name)
+			modules = append(modules, ref)
 			res.Added = append(res.Added, name)
 		}
 	}
@@ -147,10 +148,11 @@ func (r *Repo) Remove(names []string) (RemoveResult, error) {
 	var res RemoveResult
 	var unknown, disabled []string
 	for _, name := range names {
+		ref, err := r.Manifest.Ref(name)
 		switch {
-		case !r.knows(name):
+		case err != nil || !r.knows(ref.Name):
 			unknown = append(unknown, name)
-		case !slices.Contains(r.Manifest.Modules, name):
+		case !slices.Contains(r.Manifest.Modules, ref):
 			disabled = append(disabled, name)
 		case slices.Contains(res.Removed, name):
 			// Named twice; once is enough.
@@ -164,8 +166,8 @@ func (r *Repo) Remove(names []string) (RemoveResult, error) {
 	if len(disabled) > 0 {
 		return RemoveResult{}, wrapNames(ErrNotEnabled, disabled)
 	}
-	kept := slices.DeleteFunc(slices.Clone(r.Manifest.Modules), func(name string) bool {
-		return slices.Contains(res.Removed, name)
+	kept := slices.DeleteFunc(slices.Clone(r.Manifest.Modules), func(ref manifest.ModuleRef) bool {
+		return slices.Contains(res.Removed, ref.Name)
 	})
 	if len(kept) == 0 {
 		return RemoveResult{}, wrapNames(ErrNoModulesLeft, res.Removed)
@@ -270,8 +272,8 @@ func (r *Repo) knows(name string) bool {
 // with is this repo with a different module list, resolved but not yet
 // written: the shape add and remove need to render or check a change before
 // committing it to .agents.yaml.
-func (r *Repo) with(modules []string) (*Repo, error) {
-	m := manifest.Manifest{Modules: modules}
+func (r *Repo) with(modules []manifest.ModuleRef) (*Repo, error) {
+	m := manifest.Manifest{Sources: r.Manifest.Sources, Modules: modules}
 	mods, err := manifest.Resolve(m, r.Set)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", r.Dir, err)
