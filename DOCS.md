@@ -8,7 +8,7 @@ Renders a shared set of house rules into each repo's `AGENTS.md`, and keeps them
 
 - `AGENTS.md` — project-owned head and tail around generated regions, the last of them the generated situational index
 - `CLAUDE.md` — a symlink to `AGENTS.md`, created by `init` if absent
-- `.agents.yaml` — the manifest: which modules, in what order
+- `.agents.yaml` — the manifest: which sources modules come from, and which modules, in what order
 - `project/gotchas.md` — project quirks and rule feedback, appended by agents, pruned by humans
 - `project/agents/*.md` — the modules too long to inline (`cli-design.md`, `delegation.md`, `design-process.md`, `evidence.md`, `harness.md`, `jobs.md`), one per `kind: file` module the repo enables
 
@@ -66,20 +66,58 @@ It is the one region whose body comes from the manifest rather than from a modul
 
 This replaces the v1 pattern of pairing each file module with a short inline `-brief` module whose only job was to say "read that file". The situation now lives on the module it belongs to, in one line, and the table is rendered.
 
+## Sources
+
+A **source** is where modules come from: a directory with `modules/` and `templates/` at its root, nothing else required. It may be a git repository, a directory on the machine, or the one the binary embeds. `.agents.yaml` names the sources a repo uses and then picks modules from them:
+
+```yaml
+sources:
+  - name: house
+    git: git@example.com:team/house-rules.git
+    ref: 8c94b10b096cb522d05a7158b7ebc48e636a51cb
+  - name: scratch
+    path: ../house-rules
+modules:
+  - core
+  - principles
+  - scratch/experiment
+```
+
+- `name` is how module entries refer to the source. Exactly one of `git` and `path` — a source that sets both, or neither, is a manifest error.
+- `git` is anything `git clone` takes: an https or ssh URL, or a local path. The user's git configuration is left alone, so credential helpers, SSH aliases and `url.insteadOf` rewrites are how a private source is reachable.
+- `path` is a directory, absolute or relative to the repo that names it — a sibling checkout, say. It is read directly and never cached, so an edit under it shows up on the next render. It has no `ref`: there is nothing to pin.
+- `ref` pins a git source to one commit. The tool writes full shas: `init` records the sha the ref it was given resolved to, and `update` rewrites the pin to the sha it moved to. A human may write a branch or tag there by hand, in which case `sync` renders whatever the cache holds for that name and the next `update` replaces it with a sha.
+- The **default source** is the first one listed. A module entry is a bare `name` when it comes from the default source and `source/name` for any other; both forms are the same thing, and the manifest is written back in whichever form names the entry's source.
+- **Two enabled modules may not share a name**, whatever sources they come from: a region marker and a rendered path carry the module's name alone, so there would be nothing to tell the two regions apart. Enabling both is an error naming both, qualified.
+- A manifest with **no `sources:` block** renders from the source built into the binary, under the name `example`. That is what `init` writes when given no `--source`, and it is the only source a fresh install has offline. It is never listed in `sources:`.
+
+`agents init --source <url-or-directory>` writes the first source: a spec naming a directory that exists becomes a `path` source, anything else a git URL, and the name is the last path segment without any `.git`. `agents list` prints every module its sources supply, qualified by source name where that is not the default one.
+
+### The cache
+
+A git source is fetched by shelling out to `git` into a cache directory: `$AGENTS_CACHE` if set, else `$XDG_CACHE_HOME/agents`, else the platform's user cache directory plus `/agents`. Under it, one directory per source URL holds a bare mirror clone, one extracted tree per fetched commit, and a note of the sha each fetched ref resolved to. Loading a cached commit therefore runs no git at all — it is a directory read — which is what makes the offline verbs offline.
+
+**`check`, `status`, `diff`, `list` and `remove` never fetch.** They run entirely from the cache, so `agents check` in a pre-commit hook never waits on a network it may not have; a source the cache lacks is one line naming the source and telling you to run `agents sync`. **`sync`, `add` and `init` fetch a source the cache lacks**, and only that: a ref already cached is never moved, because moving a ref changes the model's instructions and that is `update`'s job, with a diff.
+
+So on a **fresh machine**, one `agents sync` while online populates the cache; everything after that, the pre-commit `agents check` included, works offline until a pin moves.
+
 ## Verbs
 
 | Verb | Flags | Does |
 |---|---|---|
-| `agents init` | `--with a,b,c` (default `core,principles,stage-build`) | Write `.agents.yaml`, render `AGENTS.md` (an existing file becomes the project-owned head; with no file at all the head is seeded from `templates/head.md`), create any file the chosen modules seed (`core` seeds `project/gotchas.md`, `docs` seeds `project/backlog.md`, `background` seeds `project/background.md`), link `CLAUDE.md`, and register the repo. Every step is skipped, not repeated, if already done. Refuses the same way `sync` does if a region has been hand-edited. |
+| `agents init` | `--with a,b,c` (default `core,principles,stage-build`), `--source <url-or-dir>` | Write `.agents.yaml` (naming the source, with a git ref resolved to the sha it pinned; with no `--source`, no `sources:` block at all and the embedded source), render `AGENTS.md` (an existing file becomes the project-owned head; with no file at all the head is seeded from `templates/head.md`), create any file the chosen modules seed (`core` seeds `project/gotchas.md`, `docs` seeds `project/backlog.md`, `background` seeds `project/background.md`), link `CLAUDE.md`, and register the repo. Every step is skipped, not repeated, if already done. Refuses the same way `sync` does if a region has been hand-edited. |
 | `agents add <module>…` | — | Append each module to `.agents.yaml` in the order given, then render: an inline module's region lands after every region already in `AGENTS.md` and above whatever tail the project wrote, a `kind: file` module gets its file, and any file the new modules seed is created. A module the manifest already lists prints `<name> is already enabled` and is skipped. Nothing above the first region is touched. A hand-edited region stops the whole thing — nothing is written, the manifest included — exactly as `sync` does. |
 | `agents remove <module>…` | — | Drop each module from `.agents.yaml` and delete its region. A `kind: file` module's file goes too when the region was all it held; a file the project has written in keeps every one of its own bytes, loses only the region, and is named in a `kept …` line. Removing is a decision, not a sync: a region edited by hand since its render is removed anyway (and said so), and no other module's region is touched — except the generated `index`, which is rewritten (or deleted, with the last `when:` module) so it never names a file the repo no longer has. |
-| `agents list` | — | One line per module the binary knows, sorted, with `*` on the ones `.agents.yaml` lists and the derived `project/agents/<name>.md` path of every `kind: file` module. The one verb that runs outside a managed repo: there it lists what could be enabled and marks nothing. |
+| `agents list` | — | One line per module the repo's sources supply, sorted, qualified as `source/name` where the module does not come from the default source, with `*` on the ones `.agents.yaml` lists and the derived `project/agents/<name>.md` path of every `kind: file` module. The one verb that runs outside a managed repo: there it lists what the embedded source could give you and marks nothing. |
 | `agents sync` | `--force`, `--all`, `--reseed-gotchas` | Re-render every stale region and generated file. Silent and exits 0 when nothing is stale. A hand-edited region stops that repo's sync — nothing is written — unless `--force`. Also creates any declared seed the repo is missing, printing `seeded <path>` — that is how an existing repo picks up a seed a module gained since `init`. With `--all`, every registered repo is visited; refusals are reported per repo and the exit is non-zero if any repo refused. Prints a budget warning after a repo's rendered lines when its `project/gotchas.md` is over budget. `--reseed-gotchas` replaces that file's preamble with the template's, keeping every entry. |
+| `agents update` | `[source…]`, `--ref <x>`, `--all` | Move each git source's pin and show what changed. Fetch every git source the manifest names — or only the ones named as arguments — resolve `--ref` (a branch, tag or sha) or, by default, the remote's current default branch, and pin the commit it names. A source that moves prints `<source>: <oldsha7> -> <newsha7>` and then, per enabled module whose body changed between those two commits, the module's name and a diff of it (a `-` line is what the rules said, a `+` line what they will say); then `ref` is rewritten to the full sha in `.agents.yaml` and the repo re-rendered, printing the same `rendered …` lines as `sync`. A source already at that commit prints nothing; a branch or tag written by hand is replaced by the sha it names, reported as `pinned <ref> to <sha7>`. A path source and the embedded source have no pin and are skipped. It never prompts, and it is the only verb that moves a ref. A hand-edited region refuses the render exactly as `sync` does — after the pin has moved — so review with `agents diff` and finish with `agents sync --force`. With `--all`, every registered repo; the exit is non-zero if any repo refused. |
 | `agents diff` | `--all` | Print every hand-edited region as a diff (a `+` line is what the agent added) plus every `rule:` entry in `project/gotchas.md`. Silent when there's nothing to review. |
 | `agents status` | `--all` | One line per repo: modules, `head=N` (the project-owned lines above the first region of `AGENTS.md`), and counts of stale, hand-edited, missing and orphaned regions, plus gotcha count and the oldest entry's age. A repo over the gotchas budget gets the warning appended to its line; a repo whose pre-commit hook doesn't run `agents check` gets a one-line hint on stderr naming the hook file and the line to paste. |
 | `agents check` | `--all` | Silent and exits 0 when every region is current and unedited and no generated file is missing. Otherwise one line per problem (`AGENTS.md: core stale`, `… hand-edited`, `… missing`, `… orphaned`) and exit 1. It writes nothing, which makes it a pre-commit line: `agents check \|\| exit 1`. With `--all`, every registered repo is checked and each line names its repo. |
 
-A persistent `--modules <dir>` flag (on every verb) reads modules from a directory instead of the ones embedded in the binary, for iterating on a module without reinstalling. Without `--all`, a verb runs on the current directory, which must hold `.agents.yaml` (there's no parent-directory search) — `list` is the exception, and runs anywhere. With `--all`, the repos come from the registry — one absolute path per line at `~/.config/agents/repos`, or wherever `$AGENTS_REGISTRY` points.
+Without `--all`, a verb runs on the current directory, which must hold `.agents.yaml` (there's no parent-directory search) — `list` is the exception, and runs anywhere. With `--all`, the repos come from the registry — one absolute path per line at `~/.config/agents/repos`, or wherever `$AGENTS_REGISTRY` points.
+
+There is no `--modules <dir>` flag: iterating on a module without reinstalling is a `path` source pointing at the checkout you are editing, which is the same mechanism the rest of the fleet uses rather than a second one.
 
 ## Adding or editing a module
 

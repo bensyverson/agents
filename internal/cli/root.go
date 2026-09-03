@@ -38,7 +38,7 @@ func Root() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: false,
 	}
-	root.AddCommand(initCmd(), addCmd(), removeCmd(), listCmd(), syncCmd(), diffCmd(), statusCmd(), checkCmd())
+	root.AddCommand(initCmd(), addCmd(), removeCmd(), listCmd(), syncCmd(), updateCmd(), diffCmd(), statusCmd(), checkCmd())
 	return root
 }
 

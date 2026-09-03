@@ -249,6 +249,35 @@ func TestLoadUnfetchedRefInFetchedRepo(t *testing.T) {
 	}
 }
 
+// RemoteHeadRef asks the remote itself, so it follows a default branch that
+// moved after any cache was populated — what `agents update` pins by default.
+func TestRemoteHeadRef(t *testing.T) {
+	hermeticGit(t)
+	fx := newFixture(t)
+
+	if got, err := source.RemoteHeadRef(fx.bare); err != nil || got != "refs/heads/main" {
+		t.Fatalf("RemoteHeadRef = %q, %v, want refs/heads/main", got, err)
+	}
+
+	// The source makes another branch its default.
+	git(t, fx.bare, "branch", "next", "main")
+	git(t, fx.bare, "symbolic-ref", "HEAD", "refs/heads/next")
+
+	if got, err := source.RemoteHeadRef(fx.bare); err != nil || got != "refs/heads/next" {
+		t.Fatalf("RemoteHeadRef after the default branch moved = %q, %v, want refs/heads/next", got, err)
+	}
+}
+
+// A remote that answers nothing at all is an error naming it, not an empty ref
+// that would quietly resolve to something else.
+func TestRemoteHeadRefOfANonRepository(t *testing.T) {
+	hermeticGit(t)
+
+	if got, err := source.RemoteHeadRef(t.TempDir()); err == nil {
+		t.Fatalf("RemoteHeadRef of a directory that is no repository = %q, want an error", got)
+	}
+}
+
 func TestResolve(t *testing.T) {
 	hermeticGit(t)
 	fx := newFixture(t)

@@ -54,6 +54,37 @@ func (l *Loader) Resolve(url, ref string) (string, error) {
 	return l.resolveCached(url, ref)
 }
 
+// RemoteHeadRef asks a remote which ref its HEAD points at — its default
+// branch as it stands now, as a full refname like "refs/heads/main".
+//
+// Resolve with an empty ref reads the cached mirror's HEAD instead, and `git
+// fetch` never refreshes that: a source that moved its default branch after
+// the clone would keep resolving the old one forever. `agents update` takes
+// its default from here so the pin follows the remote, not the cache.
+//
+// A remote that reports no symref line — an old server, or a detached HEAD —
+// falls back to the commit HEAD names, which pins the same tree.
+func RemoteHeadRef(url string) (string, error) {
+	out, err := runGit("", "ls-remote", "--symref", "--end-of-options", url, "HEAD")
+	if err != nil {
+		return "", fmt.Errorf("reading HEAD from %s: %w", url, err)
+	}
+	var head string
+	for line := range strings.SplitSeq(out, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 3 && fields[0] == "ref:" && fields[2] == "HEAD" {
+			return fields[1], nil
+		}
+		if len(fields) == 2 && fields[1] == "HEAD" {
+			head = fields[0]
+		}
+	}
+	if head != "" {
+		return head, nil
+	}
+	return "", fmt.Errorf("%w: HEAD in %s", ErrUnknownRef, url)
+}
+
 // Fetch populates the cache so that Git can load url at ref offline, and
 // returns the commit sha the ref resolved to.
 func (l *Loader) Fetch(url, ref string) (string, error) {
@@ -78,9 +109,10 @@ func (l *Loader) Fetch(url, ref string) (string, error) {
 func (l *Loader) resolveCached(url, ref string) (string, error) {
 	rev := ref
 	if rev == "" {
-		// HEAD of a mirror is the default branch as of the clone; `agents
-		// update` writes a sha, so a stale default only affects a repeat of
-		// the same unpinned request.
+		// The mirror's HEAD: current git moves it on fetch when the remote's
+		// default branch changes, older gits do not. `agents update` asks the
+		// remote directly (RemoteHeadRef) and writes a sha, so a stale HEAD
+		// here only affects a repeat of the same unpinned request.
 		rev = "HEAD"
 	}
 	sha, err := runGit(l.mirrorDir(url), "rev-parse", "--verify", "--end-of-options", rev+"^{commit}")
