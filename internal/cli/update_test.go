@@ -190,3 +190,27 @@ func handEditRegion(t *testing.T, repoDir, body string) {
 		t.Fatalf("write AGENTS.md: %v", err)
 	}
 }
+
+// A manifest whose ref was empty — written by the migration script, pinned
+// by the first update — reads "pinned to <sha>", not "pinned  to".
+func TestUpdatePinsAnEmptyRefWithoutADoubleSpace(t *testing.T) {
+	url, sha := gitFleet(t)
+	dir := t.TempDir()
+	t.Chdir(dir)
+	writeSourceFile(t, dir, manifest.FileName,
+		"sources:\n  - name: "+gitSourceName+"\n    git: "+url+"\nmodules:\n  - core\n")
+	if _, stderr, err := run(t, "init", "--with", "core"); err != nil {
+		t.Fatalf("init: %v (stderr %s)", err, stderr)
+	}
+	// init pinned it; unpin by hand to reproduce the migration script's output.
+	writeSourceFile(t, dir, manifest.FileName,
+		"sources:\n  - name: "+gitSourceName+"\n    git: "+url+"\nmodules:\n  - core\n")
+
+	stdout, stderr, err := run(t, "update")
+	if err != nil {
+		t.Fatalf("update: %v (stderr %s)", err, stderr)
+	}
+	if want := gitSourceName + ": pinned to " + sha[:7]; !strings.Contains(stdout, want) {
+		t.Errorf("update printed %q, want a line %q", stdout, want)
+	}
+}

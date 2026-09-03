@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -83,7 +84,10 @@ func repoDirs(all bool) ([]string, error) {
 
 // forEachRepo opens each directory in turn. Without --all a directory that is
 // not a managed repo is the user's mistake and stops the command; with --all it
-// is a stale registry entry, so it warns and carries on.
+// is a stale registry entry, so it warns and carries on. A source the cache
+// lacks is neither: the repo is fine and the machine has not fetched, so it is
+// reported like a skip but fails the run — a pre-commit `check --all` on a
+// fresh machine must not warn and pass.
 //
 // v1 does not walk up from the working directory: the repo is where you are.
 func forEachRepo(cmd *cobra.Command, opts repo.Options, all bool, fn func(*repo.Repo) error) error {
@@ -91,11 +95,15 @@ func forEachRepo(cmd *cobra.Command, opts repo.Options, all bool, fn func(*repo.
 	if err != nil {
 		return err
 	}
+	var unfetched []error
 	for _, dir := range dirs {
 		r, err := repo.Open(dir, opts)
 		if err != nil {
 			if !all {
 				return err
+			}
+			if errors.Is(err, source.ErrNotFetched) {
+				unfetched = append(unfetched, err)
 			}
 			// repo.Open's message already leads with the directory.
 			fmt.Fprintf(cmd.ErrOrStderr(), "skipping %v\n", err)
@@ -104,6 +112,9 @@ func forEachRepo(cmd *cobra.Command, opts repo.Options, all bool, fn func(*repo.
 		if err := fn(r); err != nil {
 			return err
 		}
+	}
+	if len(unfetched) > 0 {
+		return fmt.Errorf("%d repo(s) name a source that is not in the cache: %w", len(unfetched), unfetched[0])
 	}
 	return nil
 }

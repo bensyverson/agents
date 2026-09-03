@@ -105,6 +105,9 @@ func printUpdates(out io.Writer, updates []repo.SourceUpdate, all bool, dir stri
 // commit moving to itself.
 func header(u repo.SourceUpdate) string {
 	if !u.Moved() {
+		if u.From == "" {
+			return fmt.Sprintf("%s: pinned to %s", u.Name, short(u.To))
+		}
 		return fmt.Sprintf("%s: pinned %s to %s", u.Name, u.From, short(u.To))
 	}
 	from := short(u.FromCommit)

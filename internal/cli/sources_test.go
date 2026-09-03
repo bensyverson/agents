@@ -216,3 +216,25 @@ func TestNoVerbHasAModulesFlag(t *testing.T) {
 		}
 	}
 }
+
+// --all must not mistake an unfetched source for a stale registry entry: a
+// pre-commit `check --all` on a fresh machine has to fail, not warn and pass.
+func TestCheckAllWithoutTheCacheFails(t *testing.T) {
+	dir := emptyRepo(t)
+	writeSourceFile(t, dir, manifest.FileName,
+		"sources:\n  - name: house\n    git: https://example.invalid/house.git\n    ref: main\nmodules:\n  - core\n")
+	registry := filepath.Join(t.TempDir(), "repos")
+	writeSourceFile(t, filepath.Dir(registry), "repos", dir+"\n")
+	t.Setenv(registryEnvVar, registry)
+	t.Setenv("PATH", "")
+
+	_, _, err := run(t, "check", "--all")
+	if err == nil {
+		t.Fatal("check --all returned nil with an unfetched source; the process would exit 0")
+	}
+	for _, want := range []string{"house", "agents sync"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not mention %q", err, want)
+		}
+	}
+}
