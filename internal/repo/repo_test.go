@@ -40,8 +40,8 @@ func TestOpenErrors(t *testing.T) {
 		if !errors.As(err, &unknown) {
 			t.Fatalf("got %v, want *manifest.UnknownModulesError", err)
 		}
-		if len(unknown.Names) != 2 {
-			t.Errorf("Names = %v, want both unknown names", unknown.Names)
+		if len(unknown.Refs) != 2 {
+			t.Errorf("Names = %v, want both unknown names", unknown.Refs)
 		}
 	})
 
