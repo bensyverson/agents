@@ -26,15 +26,21 @@ func TestDogfoodAgentsMD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("module.LoadDir: %v", err)
 	}
-	var mods []module.Module
+	var enabled, mods []module.Module
 	for _, ref := range m.Modules {
 		mod, ok := set.Get(ref.Name)
 		if !ok {
 			t.Fatalf("manifest names %q, which modules/ lacks", ref)
 		}
+		enabled = append(enabled, mod)
 		if mod.Kind == module.KindInline {
 			mods = append(mods, mod)
 		}
+	}
+	// The index is generated from every enabled module and renders last, after
+	// the inline regions — the same order Repo.Targets assembles.
+	if idx, ok := Index(enabled); ok {
+		mods = append(mods, idx)
 	}
 
 	got := mustRender(t, doc, mods)

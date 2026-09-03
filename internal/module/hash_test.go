@@ -47,7 +47,7 @@ func TestEmbeddedModuleHashes(t *testing.T) {
 		"principles":  "7a5b19",
 		"stage-build": "3d5d83",
 		"go":          "91ab6a",
-		"delegation":  "722742",
+		"delegation":  "0a9536",
 		"evidence":    "2393e6",
 	}
 	for name, wantHash := range want {

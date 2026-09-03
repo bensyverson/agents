@@ -1,7 +1,10 @@
 ---
 kind: file
+when: Before filing or claiming work in job, and when running as a subagent
 ---
 # Working in `job`
+
+**Subagents pass a unique `--as <name>` and an absolute `--db` on every call; they `claim`, `note` and `release`, never `done`.**
 
 Jobs is the tracker: where work is filed, how big a unit of work is, and what a fan-out mints before it launches. `project/agents/delegation.md` covers *running* agents; this file covers the tracker they claim from. `job <verb> --help` is the authority on flags — this file is the house convention around them.
 

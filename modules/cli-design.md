@@ -1,5 +1,6 @@
 ---
 kind: file
+when: Before building or extending a command-line tool
 ---
 # CLI design for agents
 

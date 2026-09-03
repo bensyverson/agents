@@ -1,9 +1,17 @@
 ---
 kind: file
+when: Before dispatching any subagent
 ---
 # Delegating to subagents
 
-Read this before dispatching agents. Every rule here was paid for. `project/agents/jobs.md` covers the tracker the work is filed in; `project/agents/harness.md` covers the tool the agents run inside.
+Every rule here was paid for. Four hold even if you read nothing else:
+
+- **Commit before dispatching** — a worktree branches from local HEAD, so uncommitted work is invisible to the agent.
+- **Agents never commit.** They return a branch, a report and a proposed commit message.
+- **The integrator makes every commit on `main`:** `git merge --squash` the agent's branch and read the whole staged diff — that read *is* the code review.
+- **Verify what comes back.** Require **deviations from the brief** and **"what in this brief is wrong?"** in every report; the pushback, not the typing, is usually the value.
+
+`project/agents/jobs.md` covers the tracker the work is filed in; `project/agents/harness.md` covers the tool the agents run inside.
 
 ## What to delegate
 

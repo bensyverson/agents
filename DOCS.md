@@ -6,11 +6,11 @@ Renders a shared set of house rules into each repo's `AGENTS.md`, and keeps them
 
 ## Layout of a managed repo
 
-- `AGENTS.md` — project-owned head and tail around generated regions
+- `AGENTS.md` — project-owned head and tail around generated regions, the last of them the generated situational index
 - `CLAUDE.md` — a symlink to `AGENTS.md`, created by `init` if absent
 - `.agents.yaml` — the manifest: which modules, in what order
 - `project/gotchas.md` — project quirks and rule feedback, appended by agents, pruned by humans
-- `project/agents/*.md` — the few modules too long to inline (`delegation.md`, `evidence.md`, `harness.md`, `jobs.md`)
+- `project/agents/*.md` — the modules too long to inline (`cli-design.md`, `delegation.md`, `design-process.md`, `evidence.md`, `harness.md`, `jobs.md`), one per `kind: file` module the repo enables
 
 ## The marker convention
 
@@ -33,15 +33,38 @@ A module is a markdown file in `modules/`, optionally preceded by YAML frontmatt
 ```
 ---
 kind: file
-path: project/agents/delegation.md
+when: Before dispatching any subagent
 ---
 # Delegating to subagents
 …
 ```
 
 - `kind: inline` (the default) renders the module into its own marked region inside `AGENTS.md`, in manifest order.
-- `kind: file` requires `path:` and renders the module to that path instead, as its own file holding a single whole-file region (the project may still write its own head above it, exactly as with `AGENTS.md`).
+- `kind: file` renders the module to `project/agents/<name>.md` instead, as its own file holding a single whole-file region (the project may still write its own head above it, exactly as with `AGENTS.md`). The path is **derived from the name**, never declared: two file modules can therefore never collide on where they write, and a module referencing a sibling writes `project/agents/<name>.md` and knows it is right. A `path:` key is a load error naming the offending module — the key existed in v1 and is gone.
+- `when: <one situation phrase>` says when the file must be read — "Before dispatching any subagent". It is valid only with `kind: file` (`when:` on an inline module is a load error) and optional even there: a file module without it renders exactly as before and simply never appears in the index. The phrase is one row of the index table below, so write it as the condition an agent can match against, not as a description of the file.
 - `seeds: [project/gotchas.md, …]` lists repo-relative files the module wants every repo that enables it to have. Each is created from `templates/<seed path>` when it is missing, and never overwritten — a seeded file belongs to the repo the moment it exists. Valid on any kind; a path that is absolute or escapes the repo is an error, as is a declared seed with no template. `templates/head.md` is not a seed: the head is `init`'s own special case.
+
+`index` is a **reserved module name**: the tool generates a region of that name itself (below), so a module file called `index.md` is a load error and `index` in `.agents.yaml` is an unknown module.
+
+## The situational index
+
+`AGENTS.md` carries one generated region, named `index`, that lists every enabled module with a `when:` phrase and the file to read for it:
+
+```
+<!-- agents:begin index@a1b2c3 -->
+## Situational instructions
+
+These files carry instructions for specific situations. When one applies, read the file before acting and follow it.
+
+| Situation | File |
+|---|---|
+| Before dispatching any subagent | `project/agents/delegation.md` |
+<!-- agents:end index -->
+```
+
+It is the one region whose body comes from the manifest rather than from a module file, and it is an ordinary region in every other respect: it renders after the last inline region, its marker carries the hash of its own bytes, and `sync`, `check`, `diff`, `status` and `remove` treat it exactly as they treat `core`. Rows are in manifest order. The region exists only while at least one enabled module carries `when:`; enabling the first such module creates it and removing the last one deletes it, which is why `remove` rewrites it rather than leaving it stale.
+
+This replaces the v1 pattern of pairing each file module with a short inline `-brief` module whose only job was to say "read that file". The situation now lives on the module it belongs to, in one line, and the table is rendered.
 
 ## Verbs
 
@@ -49,8 +72,8 @@ path: project/agents/delegation.md
 |---|---|---|
 | `agents init` | `--with a,b,c` (default `core,principles,stage-build`) | Write `.agents.yaml`, render `AGENTS.md` (an existing file becomes the project-owned head; with no file at all the head is seeded from `templates/head.md`), create any file the chosen modules seed (`core` seeds `project/gotchas.md`, `docs` seeds `project/backlog.md`, `background` seeds `project/background.md`), link `CLAUDE.md`, and register the repo. Every step is skipped, not repeated, if already done. Refuses the same way `sync` does if a region has been hand-edited. |
 | `agents add <module>…` | — | Append each module to `.agents.yaml` in the order given, then render: an inline module's region lands after every region already in `AGENTS.md` and above whatever tail the project wrote, a `kind: file` module gets its file, and any file the new modules seed is created. A module the manifest already lists prints `<name> is already enabled` and is skipped. Nothing above the first region is touched. A hand-edited region stops the whole thing — nothing is written, the manifest included — exactly as `sync` does. |
-| `agents remove <module>…` | — | Drop each module from `.agents.yaml` and delete its region. A `kind: file` module's file goes too when the region was all it held; a file the project has written in keeps every one of its own bytes, loses only the region, and is named in a `kept …` line. Removing is a decision, not a sync: a region edited by hand since its render is removed anyway (and said so), and no other module's region is touched. |
-| `agents list` | — | One line per module the binary knows, sorted, with `*` on the ones `.agents.yaml` lists and the file path of every `kind: file` module. The one verb that runs outside a managed repo: there it lists what could be enabled and marks nothing. |
+| `agents remove <module>…` | — | Drop each module from `.agents.yaml` and delete its region. A `kind: file` module's file goes too when the region was all it held; a file the project has written in keeps every one of its own bytes, loses only the region, and is named in a `kept …` line. Removing is a decision, not a sync: a region edited by hand since its render is removed anyway (and said so), and no other module's region is touched — except the generated `index`, which is rewritten (or deleted, with the last `when:` module) so it never names a file the repo no longer has. |
+| `agents list` | — | One line per module the binary knows, sorted, with `*` on the ones `.agents.yaml` lists and the derived `project/agents/<name>.md` path of every `kind: file` module. The one verb that runs outside a managed repo: there it lists what could be enabled and marks nothing. |
 | `agents sync` | `--force`, `--all`, `--reseed-gotchas` | Re-render every stale region and generated file. Silent and exits 0 when nothing is stale. A hand-edited region stops that repo's sync — nothing is written — unless `--force`. Also creates any declared seed the repo is missing, printing `seeded <path>` — that is how an existing repo picks up a seed a module gained since `init`. With `--all`, every registered repo is visited; refusals are reported per repo and the exit is non-zero if any repo refused. Prints a budget warning after a repo's rendered lines when its `project/gotchas.md` is over budget. `--reseed-gotchas` replaces that file's preamble with the template's, keeping every entry. |
 | `agents diff` | `--all` | Print every hand-edited region as a diff (a `+` line is what the agent added) plus every `rule:` entry in `project/gotchas.md`. Silent when there's nothing to review. |
 | `agents status` | `--all` | One line per repo: modules, `head=N` (the project-owned lines above the first region of `AGENTS.md`), and counts of stale, hand-edited, missing and orphaned regions, plus gotcha count and the oldest entry's age. A repo over the gotchas budget gets the warning appended to its line; a repo whose pre-commit hook doesn't run `agents check` gets a one-line hint on stderr naming the hook file and the line to paste. |

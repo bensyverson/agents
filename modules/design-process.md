@@ -1,5 +1,6 @@
 ---
 kind: file
+when: Before a meaningful change to user-facing functionality
 ---
 
 # Design process

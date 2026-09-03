@@ -1,5 +1,6 @@
 ---
 kind: file
+when: Before measuring anything, verifying a claim, or writing down a cause
 ---
 # Working with evidence
 
