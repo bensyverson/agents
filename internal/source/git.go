@@ -38,7 +38,7 @@ func (l *Loader) cachedSha(url, ref string) (string, bool) {
 			return sha, true
 		}
 	}
-	if isFullSha(ref) {
+	if IsFullSha(ref) {
 		return ref, true
 	}
 	return "", false
@@ -249,9 +249,9 @@ func writeFile(path, body string) error {
 	return os.WriteFile(path, []byte(body+"\n"), 0o644)
 }
 
-// isFullSha reports whether ref is a complete object name rather than a
+// IsFullSha reports whether ref is a complete object name rather than a
 // symbolic ref, for either hash size git supports.
-func isFullSha(ref string) bool {
+func IsFullSha(ref string) bool {
 	if len(ref) != 40 && len(ref) != 64 {
 		return false
 	}

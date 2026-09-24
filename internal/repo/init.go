@@ -12,6 +12,7 @@ import (
 
 	"github.com/bensyverson/agents/internal/manifest"
 	"github.com/bensyverson/agents/internal/registry"
+	"github.com/bensyverson/agents/internal/source"
 )
 
 // DefaultModules is what a repo gets when init is given no module list: the
@@ -199,17 +200,27 @@ func Init(dir string, opts InitOptions) (InitResult, error) {
 		wanted = existing
 	}
 
+	// Decision 7: the manifest records the sha the ref resolved to, so the
+	// repo is pinned even when the human asked for a branch. The ref is
+	// resolved against the remote, as `agents update` does: the cache only
+	// knows the commit it last fetched under that name, which on a machine
+	// that fetched the source weeks ago is weeks old. An existing manifest
+	// keeps its own pin; moving one is `agents update`'s job.
+	if !hasManifest && len(wanted.Sources) == 1 {
+		if s := &wanted.Sources[0]; s.Git != "" && !source.IsFullSha(s.Ref) {
+			if opts.Open.Loader == nil {
+				return res, fmt.Errorf("%s: %w for source %q", dir, ErrNoLoader, s.Name)
+			}
+			sha, err := pinRemote(opts.Open.Loader, s.Git, s.Ref)
+			if err != nil {
+				return res, fmt.Errorf("%s: %w", dir, err)
+			}
+			s.Ref = sha
+		}
+	}
 	sources, err := LoadSources(dir, wanted, opts.Open)
 	if err != nil {
 		return res, fmt.Errorf("%s: %w", dir, err)
-	}
-	// Decision 7: the manifest records the sha the ref resolved to, so the
-	// repo is pinned even when the human asked for a branch. An existing
-	// manifest keeps its own pin; moving one is `agents update`'s job.
-	if !hasManifest && len(wanted.Sources) == 1 {
-		if commit := sources[wanted.Sources[0].Name].Source.Commit; commit != "" {
-			wanted.Sources[0].Ref = commit
-		}
 	}
 	if len(wanted.Sources) == 1 {
 		res.Source = wanted.Sources[0]

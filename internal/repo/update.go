@@ -128,15 +128,7 @@ func (r *Repo) updateSource(loader *source.Loader, entry manifest.Source, ref st
 		return nil, err
 	}
 
-	wanted := ref
-	if wanted == "" {
-		// The remote's HEAD, not the cached mirror's: see source.RemoteHeadRef.
-		wanted, err = source.RemoteHeadRef(entry.Git)
-		if err != nil {
-			return nil, err
-		}
-	}
-	sha, err := loader.Fetch(entry.Git, wanted)
+	sha, err := pinRemote(loader, entry.Git, ref)
 	if err != nil {
 		return nil, err
 	}
@@ -219,4 +211,20 @@ func selectSources(m manifest.Manifest, names []string) (map[string]bool, error)
 		out[name] = true
 	}
 	return out, nil
+}
+
+// pinRemote resolves ref against the remote at url — its HEAD when ref is
+// empty — fetches that commit into the cache and returns its sha. It is how a
+// pin is chosen, by update and by init alike: asking the remote, never the
+// cache, whose record of a branch is only the commit it last fetched.
+func pinRemote(loader *source.Loader, url, ref string) (string, error) {
+	wanted := ref
+	if wanted == "" {
+		// The remote's HEAD, not the cached mirror's: see source.RemoteHeadRef.
+		var err error
+		if wanted, err = source.RemoteHeadRef(url); err != nil {
+			return "", err
+		}
+	}
+	return loader.Fetch(url, wanted)
 }

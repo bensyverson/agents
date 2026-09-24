@@ -357,3 +357,60 @@ func TestInitSeedsHeadOnlyOnce(t *testing.T) {
 		t.Errorf("second Init changed bytes on disk:\nbefore %v\n after %v", before, after)
 	}
 }
+
+// initFromGit inits a fresh repo on the git fixture at ref, sharing cache with
+// every other init in the test — the one cache a machine has — and returns the
+// sha its new manifest pins.
+func initFromGit(t *testing.T, cache, url, ref string) (dir, pinned string) {
+	t.Helper()
+	dir = t.TempDir()
+	opts := InitOptions{
+		Modules:      []string{"one"},
+		Source:       manifest.Source{Name: "house", Git: url, Ref: ref},
+		Open:         testOptionsWith(cache, FetchMissing),
+		RegistryPath: filepath.Join(t.TempDir(), "repos"),
+	}
+	if _, err := Init(dir, opts); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	m, ok, err := readExisting(dir)
+	if err != nil || !ok {
+		t.Fatalf("reading the new manifest: ok=%v err=%v", ok, err)
+	}
+	return dir, m.Sources[0].Ref
+}
+
+// Regression: a machine that had fetched a source once pinned every later init
+// to that first commit, however far the remote had moved since. Init read the
+// ref's sha from the cache and fetched only when the cache had none, so a new
+// repo started stale and nothing said so.
+func TestInitPinsTheRemotesCurrentHeadAfterTheSourceMoved(t *testing.T) {
+	for _, tc := range []struct{ name, ref string }{
+		{"no ref", ""},
+		{"a branch", "main"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fx := newGitSource(t, gitSourceFiles())
+			cache := t.TempDir()
+			if _, first := initFromGit(t, cache, fx.url, tc.ref); first != fx.sha {
+				t.Fatalf("first init pinned %s, want %s", first, fx.sha)
+			}
+
+			files := gitSourceFiles()
+			files["modules/one.md"] = "---\nseeds: [" + gitSeedFile + "]\n---\n" + movedModuleBody
+			moved := pushCommit(t, fx.url, files)
+
+			dir, second := initFromGit(t, cache, fx.url, tc.ref)
+			if second != moved {
+				t.Errorf("second init pinned %s, want the remote's current head %s", second, moved)
+			}
+			body, err := os.ReadFile(filepath.Join(dir, "AGENTS.md"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(body), movedModuleBody) {
+				t.Errorf("AGENTS.md does not render the current module:\n%s", body)
+			}
+		})
+	}
+}
