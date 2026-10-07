@@ -75,7 +75,6 @@ func (r *Repo) Check() (CheckReport, error) {
 	}
 	out := CheckReport{Dir: r.Dir}
 	for _, t := range rep.Targets {
-		before := len(out.Problems)
 		for _, region := range t.Report.Regions {
 			// Stale and edited are separate problems on purpose: sync rewrites
 			// for one and refuses for the other, so neither may hide the other.
@@ -92,7 +91,7 @@ func (r *Repo) Check() (CheckReport, error) {
 		for _, name := range t.Report.Missing {
 			out.add(t.Path, name, ProblemMissing)
 		}
-		if len(out.Problems) == before && t.NeedsWrite() {
+		if t.Unexplained() {
 			out.add(t.Path, "", ProblemUnrendered)
 		}
 	}

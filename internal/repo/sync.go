@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/bensyverson/agents/internal/render"
 )
@@ -42,6 +43,10 @@ type SyncResult struct {
 	// Seeded is each file created from a module's declared seed, in manifest
 	// order. Only ever files that were missing: seeds are never overwritten.
 	Seeded []string
+	// Removed are orphaned generated files sync deleted; Kept are those it
+	// only stripped of their region, because the project wrote in them.
+	Removed []string
+	Kept    []string
 	// Edited is non-empty only when the sync refused.
 	Edited []EditedRegion
 }
@@ -89,10 +94,9 @@ func (r *Repo) Sync(force bool) (SyncResult, error) {
 	}
 
 	for _, t := range pending {
-		if err := writeFile(filepath.Join(r.Dir, t.Path), t.Rendered); err != nil {
+		if err := r.write(t, &res); err != nil {
 			return res, err
 		}
-		res.Written = append(res.Written, t.Path)
 	}
 
 	// Seeding after the render, and on every sync rather than on init alone,
@@ -103,6 +107,32 @@ func (r *Repo) Sync(force bool) (SyncResult, error) {
 		return res, fmt.Errorf("%s: %w", r.Dir, err)
 	}
 	return res, nil
+}
+
+// write puts one pending target on disk and records what happened. An orphaned
+// generated file is deleted when its regions were all it held, and otherwise
+// rewritten without them, keeping every byte the project wrote — the same
+// choice `remove` makes.
+func (r *Repo) write(t Target, res *SyncResult) error {
+	path := filepath.Join(r.Dir, filepath.FromSlash(t.Path))
+	switch {
+	case t.Orphaned && strings.TrimSpace(t.Rendered) == "":
+		if err := os.Remove(path); err != nil {
+			return fmt.Errorf("removing %s: %w", t.Path, err)
+		}
+		res.Removed = append(res.Removed, t.Path)
+	case t.Orphaned:
+		if err := writeFile(path, t.Rendered); err != nil {
+			return err
+		}
+		res.Kept = append(res.Kept, t.Path)
+	default:
+		if err := writeFile(path, t.Rendered); err != nil {
+			return err
+		}
+		res.Written = append(res.Written, t.Path)
+	}
+	return nil
 }
 
 // writeFile replaces path atomically: a temp file in the same directory, then a

@@ -91,6 +91,18 @@ func TestRender(t *testing.T) {
 			"# H\n\n" + wantRegion(b),
 		},
 		{
+			"an orphan slot is dropped before survivors are filled, so one pass reaches manifest order",
+			"# H\n\n" + wantRegion(b) + "\n" + wantRegion(c) + "\n",
+			[]module.Module{a, b},
+			"# H\n\n" + wantRegion(a) + "\n" + wantRegion(b),
+		},
+		{
+			"a new module in the middle of the manifest lands in manifest order in one pass",
+			"# H\n\n" + wantRegion(a) + "\n" + wantRegion(c) + "\n",
+			[]module.Module{a, b, c},
+			"# H\n\n" + wantRegion(a) + "\n" + wantRegion(b) + "\n" + wantRegion(c) + "\n",
+		},
+		{
 			"no modules at all removes every region",
 			"# H\n\n" + wantRegion(a) + "\n",
 			nil,

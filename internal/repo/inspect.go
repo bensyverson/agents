@@ -57,7 +57,10 @@ type Status struct {
 	EditedCount  int
 	MissingCount int
 	OrphanCount  int
-	GotchaCount  int
+	// UnrenderedCount is the files sync would rewrite for a reason no region
+	// flag explains; check reports each as "not what the modules render".
+	UnrenderedCount int
+	GotchaCount     int
 	// GotchaLines is the whole gotchas file's size, preamble included.
 	GotchaLines int
 	// GotchasOverBudget is true once the file has outgrown gotchas.Budget*.
@@ -90,6 +93,9 @@ func (r *Repo) Status() (Status, error) {
 			}
 		}
 		st.MissingCount += len(t.Report.Missing)
+		if t.Unexplained() {
+			st.UnrenderedCount++
+		}
 		for _, region := range t.Report.Regions {
 			if region.Stale {
 				st.StaleCount++

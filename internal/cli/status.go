@@ -20,7 +20,9 @@ func statusCmd() *cobra.Command {
 		Use:   "status",
 		Short: "One line per repo: modules, stale and hand-edited regions, gotchas",
 		Long: "stale = the module moved since the region was rendered; edited = the region\n" +
-			"was changed by hand since. A region can be both, and is counted in both.",
+			"was changed by hand since. A region can be both, and is counted in both.\n" +
+			"orphans = regions whose module left the manifest, in AGENTS.md or a generated file;\n" +
+			"unrendered = files sync would rewrite for a reason no region explains (order, spacing).",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			opts, err := openOptions(repo.FetchNever)
@@ -81,6 +83,7 @@ func statusLine(st repo.Status) string {
 		fmt.Sprintf("edited=%d", st.EditedCount),
 		fmt.Sprintf("missing=%d", st.MissingCount),
 		fmt.Sprintf("orphans=%d", st.OrphanCount),
+		fmt.Sprintf("unrendered=%d", st.UnrenderedCount),
 		gotchaField(st),
 	}
 	// The nag rides on the repo's own line: one line per repo is the contract.

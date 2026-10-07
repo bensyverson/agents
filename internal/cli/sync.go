@@ -66,6 +66,13 @@ func syncCmd() *cobra.Command {
 						fmt.Fprintln(cmd.OutOrStdout(), "rendered "+path)
 					}
 				}
+				for _, path := range res.Removed {
+					fmt.Fprintln(cmd.OutOrStdout(), prefixed(all, r.Dir, "removed "+path))
+				}
+				for _, path := range res.Kept {
+					fmt.Fprintln(cmd.OutOrStdout(), prefixed(all, r.Dir,
+						"kept "+path+": it holds text the project wrote; removed the orphaned region only"))
+				}
 				for _, path := range res.Seeded {
 					if all {
 						fmt.Fprintln(cmd.OutOrStdout(), r.Dir+": seeded "+path)

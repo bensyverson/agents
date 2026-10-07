@@ -115,12 +115,30 @@ type Target struct {
 	Rendered string
 	// Report classifies the current file's regions against Modules.
 	Report render.Report
+	// Orphaned marks a generated file no module renders to any more: Modules
+	// is empty and a render strips every region from it.
+	Orphaned bool
 }
 
 // NeedsWrite reports whether syncing this target would change the file. It is
 // the only staleness test that matters to sync: rendering is deterministic, so
 // "the render differs" covers stale markers, missing regions and orphans alike.
 func (t Target) NeedsWrite() bool { return t.Rendered != t.Current }
+
+// Unexplained reports whether syncing this target would change the file for a
+// reason no region flag gives: regions in an order the manifest no longer has,
+// or separators the renderer would rewrite. Check names it ProblemUnrendered.
+func (t Target) Unexplained() bool {
+	if !t.NeedsWrite() || len(t.Report.Missing) > 0 {
+		return false
+	}
+	for _, region := range t.Report.Regions {
+		if !region.Fresh() {
+			return false
+		}
+	}
+	return true
+}
 
 // moduleBody is the current body of the named module, or "" for an orphan
 // region whose module has left the manifest.
@@ -164,7 +182,53 @@ func (r *Repo) Targets() ([]Target, error) {
 		}
 		targets = append(targets, t)
 	}
-	return targets, nil
+	orphans, err := r.orphanTargets(targets)
+	if err != nil {
+		return nil, err
+	}
+	return append(targets, orphans...), nil
+}
+
+// orphanTargets finds generated files no module of the manifest renders to any
+// more: files under project/agents/ that carry an agents region marker but are
+// not one of targets. Each is a target with no modules, so every region in it
+// reads as an orphan and a render removes them all. A file with no marker is
+// the project's and is never looked at again; one whose markers do not parse is
+// left alone rather than guessed at.
+func (r *Repo) orphanTargets(known []Target) ([]Target, error) {
+	skip := make(map[string]bool, len(known))
+	for _, t := range known {
+		skip[t.Path] = true
+	}
+	root := filepath.Join(r.Dir, filepath.FromSlash(module.FileDir))
+	var out []Target
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		switch {
+		case errors.Is(err, fs.ErrNotExist) && path == root:
+			return nil
+		case err != nil:
+			return err
+		case !d.Type().IsRegular():
+			return nil
+		}
+		rel, err := filepath.Rel(r.Dir, path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		if skip[rel] {
+			return nil
+		}
+		t, err := r.target(rel, nil)
+		t.Orphaned = true
+		if err != nil || len(t.Report.Regions) == 0 {
+			// Unparseable markers are not ours to fix; no regions is not ours.
+			return nil
+		}
+		out = append(out, t)
+		return nil
+	})
+	return out, err
 }
 
 func (r *Repo) target(rel string, mods []module.Module) (Target, error) {
