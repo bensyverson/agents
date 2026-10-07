@@ -46,13 +46,21 @@ type AddSourceResult struct {
 	Removed []string
 	// Regions is one entry per removed module, in the same order.
 	Regions []RemovedRegion
+	// Enabled are the defaults the new source declares, enabled in place of
+	// the examples; empty unless the swap happened and the source declares
+	// some. Sync is the render that enabled them.
+	Enabled []string
+	Sync    SyncResult
 }
 
 // AddSource appends a source to the manifest and enables no module from it.
 //
 // A manifest with no sources renders from the example modules the binary
 // embeds, which the first real source replaces: they are removed, regions and
-// files exactly as Remove would take them, and the result names them. The
+// files exactly as Remove would take them, and the result names them — and
+// the defaults the new source declares are enabled in their place, so the repo
+// is not left with nothing to render. A source added beside others enables
+// nothing: that repo has already chosen its modules. The
 // manifest is written last, after the source has loaded and the new manifest
 // has validated, so a source that cannot be reached or a name already in use
 // changes nothing.
@@ -108,6 +116,13 @@ func (r *Repo) AddSource(src manifest.Source, opts Options) (AddSourceResult, er
 	}
 	r.adopt(after)
 	r.Sources = sources
+	if defaults := sources[src.Name].Source.Defaults; swap && len(defaults) > 0 {
+		added, err := r.Add(defaults)
+		res.Enabled, res.Sync = added.Added, added.Sync
+		if err != nil {
+			return res, err
+		}
+	}
 	return res, nil
 }
 

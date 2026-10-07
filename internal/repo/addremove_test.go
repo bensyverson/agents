@@ -453,22 +453,17 @@ func TestRemoveUnknownOrDisabledModuleIsAnError(t *testing.T) {
 	}
 }
 
-// Removing the last module leaves an empty list, which `agents add` refills:
-// the same state `agents source add` leaves when it swaps out the examples.
-func TestRemoveEveryModuleLeavesAnEmptyList(t *testing.T) {
+// Removing the last module is refused: a repo with nothing to render fails its
+// pre-commit check, and nothing but an accident asks for that.
+func TestRemoveEveryModuleIsRefused(t *testing.T) {
 	dir := baseRepo(t)
+	before := snapshot(t, dir)
 
-	if _, err := mustOpen(t, dir).Remove([]string{"core", "principles"}); err != nil {
-		t.Fatalf("Remove: %v", err)
+	_, err := mustOpen(t, dir).Remove([]string{"core", "principles"})
+	if !errors.Is(err, ErrNoModulesLeft) {
+		t.Fatalf("Remove error = %v, want ErrNoModulesLeft", err)
 	}
-	m, err := manifest.Read(filepath.Join(dir, manifest.FileName))
-	if err != nil {
-		t.Fatalf("Read: %v", err)
-	}
-	if len(m.Modules) != 0 {
-		t.Errorf("modules = %v, want none", m.Entries())
-	}
-	if got := readFile(t, filepath.Join(dir, AgentsFile)); strings.Contains(got, "agents:begin") {
-		t.Errorf("AGENTS.md still holds a region:\n%s", got)
+	if got := snapshot(t, dir); !maps.Equal(got, before) {
+		t.Errorf("a refused remove wrote something: %v -> %v", before, got)
 	}
 }

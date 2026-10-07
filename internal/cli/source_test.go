@@ -123,6 +123,28 @@ func TestSourceAddOnAnEmbeddedRepoRemovesTheExampleModulesAndAddWorks(t *testing
 	}
 }
 
+func TestSourceAddOnAnEmbeddedRepoEnablesTheSourceDefaults(t *testing.T) {
+	emptyRepo(t)
+	if _, stderr, err := run(t, "init"); err != nil {
+		t.Fatalf("init: %v (stderr %s)", err, stderr)
+	}
+	other := newSource(t, "other", map[string]string{
+		"modules/web.md": "web rules\n",
+		"source.yaml":    "defaults: [web]\n",
+	})
+
+	stdout, stderr, err := run(t, "source", "add", other)
+	if err != nil {
+		t.Fatalf("source add: %v (stderr %s)", err, stderr)
+	}
+	if !strings.Contains(stdout, "enabled web") {
+		t.Errorf("output does not say the default was enabled:\n%s", stdout)
+	}
+	if _, stderr, err := run(t, "check"); err != nil {
+		t.Errorf("check after source add: %v (stderr %s)", err, stderr)
+	}
+}
+
 func TestSourceRemoveRefusesWhileAModuleIsEnabledAndNamesIt(t *testing.T) {
 	_, sourceDir, _ := fixture(t)
 	initRepo(t, sourceDir)

@@ -101,12 +101,13 @@ func sourceRemoveCmd() *cobra.Command {
 
 // printSourceAdd says what was added and, when the swap took the example
 // modules out, one line naming them and why — plus a warning for anything it
-// could not remove cleanly.
+// could not remove cleanly — then the defaults it enabled in their place.
 func printSourceAdd(out io.Writer, res repo.AddSourceResult) {
 	fmt.Fprintln(out, "added "+sourceLine(res.Source))
 	if len(res.Removed) == 0 {
 		return
 	}
+	defer printAdd(out, repo.AddResult{Added: res.Enabled, Sync: res.Sync})
 	fmt.Fprintln(out, "removed the example modules "+strings.Join(res.Removed, ", ")+
 		": they are built into the binary, which a manifest with sources: does not use")
 	for i, name := range res.Removed {

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/bensyverson/agents/internal/manifest"
+	"github.com/bensyverson/agents/internal/source"
 )
 
 // openWithSources opens dir against the fixture sources, fetching what the
@@ -185,6 +186,69 @@ func TestAddSourceToAnEmbeddedRepoRemovesTheExampleModules(t *testing.T) {
 }
 
 // The project-owned head above the first region is never part of the swap.
+// A source that declares defaults takes over from the examples in one step:
+// the swap enables and renders them, so the repo is never left with nothing to
+// render and its pre-commit check keeps passing.
+func TestAddSourceToAnEmbeddedRepoEnablesTheSourceDefaults(t *testing.T) {
+	dir := newRepo(t, map[string]string{manifest.FileName: "modules:\n  - core\n"})
+	if _, err := mustOpenSeeding(t, dir).Sync(false); err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	pathDir := newPathSource(t)
+	writeTree(t, pathDir, map[string]string{source.SourceFile: "defaults: [two]\n"})
+	opts := testOptionsWith(t.TempDir(), FetchMissing)
+	r, err := Open(dir, opts)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+
+	res, err := r.AddSource(manifest.Source{Name: "local", Path: pathDir}, opts)
+	if err != nil {
+		t.Fatalf("AddSource: %v", err)
+	}
+
+	if want := []string{"two"}; !slices.Equal(res.Enabled, want) {
+		t.Errorf("Enabled = %v, want %v", res.Enabled, want)
+	}
+	if got := readFixture(t, dir, AgentsFile); !strings.Contains(got, pathModuleBody) {
+		t.Errorf("%s does not render the default module:\n%s", AgentsFile, got)
+	}
+	r, err = Open(dir, opts)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	if got := r.Manifest.Entries(); !slices.Equal(got, []string{"two"}) {
+		t.Errorf("manifest modules = %v, want [two]", got)
+	}
+	rep, err := r.Check()
+	if err != nil || len(rep.Problems) > 0 {
+		t.Errorf("check after the swap = %+v, %v; want clean", rep.Problems, err)
+	}
+}
+
+// A repo that already lists sources chose its modules; a further source's
+// defaults are an offer, not something to enable behind its back.
+func TestAddSourceToARepoWithSourcesEnablesNothing(t *testing.T) {
+	hermeticGit(t)
+	fx := newGitSource(t, gitSourceFiles())
+	body := "sources:\n  - name: house\n    git: " + fx.url + "\n    ref: " + fx.sha + "\nmodules:\n  - one\n"
+	dir := newRepo(t, map[string]string{manifest.FileName: body})
+	pathDir := newPathSource(t)
+	writeTree(t, pathDir, map[string]string{source.SourceFile: "defaults: [two]\n"})
+	r := openWithSources(t, dir)
+
+	res, err := r.AddSource(manifest.Source{Name: "local", Path: pathDir}, testOptionsWith(t.TempDir(), FetchMissing))
+	if err != nil {
+		t.Fatalf("AddSource: %v", err)
+	}
+	if len(res.Enabled) != 0 {
+		t.Errorf("Enabled = %v, want none", res.Enabled)
+	}
+	if got := readFixture(t, dir, manifest.FileName); strings.Contains(got, "local/two") {
+		t.Errorf("manifest enabled a default:\n%s", got)
+	}
+}
+
 func TestAddSourceToAnEmbeddedRepoLeavesTheHeadAlone(t *testing.T) {
 	head := "# Mine\n\nhand-written\n\n"
 	dir := newRepo(t, map[string]string{
