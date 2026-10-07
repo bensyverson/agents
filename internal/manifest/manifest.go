@@ -66,14 +66,45 @@ type Lookup func(ModuleRef) (module.Module, bool)
 type UnknownModulesError struct {
 	// Refs are the unknown entries, in manifest order.
 	Refs []ModuleRef
+	// Embedded are entries no source supplies but the binary's embedded
+	// example source does: the manifest was moved to real sources and still
+	// lists the demo modules.
+	Embedded []ModuleRef
+	// DefaultSource is the manifest's default, so an entry prints as the user
+	// would type it: bare when it comes from the default source.
+	DefaultSource string
 }
 
 func (e *UnknownModulesError) Error() string {
-	names := make([]string, len(e.Refs))
-	for i, ref := range e.Refs {
-		names[i] = ref.String()
+	var parts []string
+	if len(e.Refs) > 0 {
+		names := make([]string, len(e.Refs))
+		for i, ref := range e.Refs {
+			names[i] = ref.String()
+		}
+		parts = append(parts, fmt.Sprintf("unknown modules in %s: %s", FileName, strings.Join(names, ", ")))
 	}
-	return fmt.Sprintf("unknown modules in %s: %s", FileName, strings.Join(names, ", "))
+	if len(e.Embedded) > 0 {
+		entries := make([]string, len(e.Embedded))
+		for i, ref := range e.Embedded {
+			entries[i] = ref.entry(e.DefaultSource)
+		}
+		subject, verb, noun := joinAnd(entries), "is", "an example module"
+		if len(entries) > 1 {
+			verb, noun = "are", "example modules"
+		}
+		parts = append(parts, fmt.Sprintf("%s %s %s built into the binary, which a manifest with sources: does not use; run agents remove %s",
+			subject, verb, noun, strings.Join(entries, " ")))
+	}
+	return strings.Join(parts, "; ")
+}
+
+// joinAnd is "a", "a and b", or "a, b and c".
+func joinAnd(items []string) string {
+	if len(items) < 2 {
+		return strings.Join(items, "")
+	}
+	return strings.Join(items[:len(items)-1], ", ") + " and " + items[len(items)-1]
 }
 
 // Parse reads a manifest and validates it. Every entry comes back with its
@@ -95,10 +126,22 @@ func Parse(data []byte) (Manifest, error) {
 	return m, nil
 }
 
+// RequireModules is the check every verb that renders makes: a manifest with
+// no modules is valid to read and to add to, but there is nothing to render.
+func (m Manifest) RequireModules() error {
+	if len(m.Modules) == 0 {
+		return ErrNoModules
+	}
+	return nil
+}
+
 // Marshal renders a manifest in canonical form. An invalid manifest is an
 // error rather than a file someone has to clean up later.
 func Marshal(m Manifest) ([]byte, error) {
 	m = m.withDefaults()
+	if err := m.RequireModules(); err != nil {
+		return nil, err
+	}
 	if err := m.validate(); err != nil {
 		return nil, err
 	}
@@ -190,9 +233,6 @@ func (m Manifest) withDefaults() Manifest {
 // validate assumes every entry names its source; Parse and Marshal both fill
 // them in first.
 func (m Manifest) validate() error {
-	if len(m.Modules) == 0 {
-		return ErrNoModules
-	}
 	if err := m.validateSources(); err != nil {
 		return err
 	}

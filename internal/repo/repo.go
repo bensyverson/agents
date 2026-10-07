@@ -86,7 +86,7 @@ func Open(dir string, opts Options) (*Repo, error) {
 	}
 	mods, origin, err := sources.resolve(m)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", dir, err)
+		return nil, fmt.Errorf("%s: %w", dir, explainEmbedded(err, m, opts))
 	}
 	return &Repo{Dir: dir, Manifest: m, Sources: sources, mods: mods, origin: origin}, nil
 }
@@ -154,6 +154,9 @@ func (t Target) moduleBody(name string) string {
 // Targets returns AGENTS.md followed by one target per kind:file module, each
 // read from disk, rendered and inspected.
 func (r *Repo) Targets() ([]Target, error) {
+	if err := r.Manifest.RequireModules(); err != nil {
+		return nil, err
+	}
 	var inline, files []module.Module
 	for _, m := range r.mods {
 		if m.Kind == module.KindFile {

@@ -99,7 +99,7 @@ func (l *Loader) Fetch(url, ref string) (string, error) {
 		return "", err
 	}
 	if err := writeFile(l.refFile(url, ref), sha); err != nil {
-		return "", fmt.Errorf("recording %q in the cache: %w", ref, err)
+		return "", l.cacheError(fmt.Errorf("recording %q: %w", ref, err))
 	}
 	return sha, nil
 }
@@ -136,11 +136,11 @@ func (l *Loader) mirror(url string) error {
 	}
 	root := l.sourceDir(url)
 	if err := os.MkdirAll(root, 0o755); err != nil {
-		return fmt.Errorf("preparing the cache: %w", err)
+		return l.cacheError(err)
 	}
 	tmp, err := os.MkdirTemp(root, "clone-")
 	if err != nil {
-		return fmt.Errorf("preparing the cache: %w", err)
+		return l.cacheError(err)
 	}
 	defer os.RemoveAll(tmp)
 
@@ -154,6 +154,13 @@ func (l *Loader) mirror(url string) error {
 	return nil
 }
 
+// cacheError names the cache directory and the variable that moves it. There
+// is deliberately no fallback to a temporary directory: it would be cold on
+// every run, and the offline verbs would then ask for a sync that cannot stick.
+func (l *Loader) cacheError(err error) error {
+	return fmt.Errorf("preparing the cache at %s: %w; set %s to a writable directory", l.cacheDir, err, CacheEnv)
+}
+
 // extract writes one commit's tree into the cache so that loading it later
 // needs no git at all. It is a no-op once the tree is there.
 func (l *Loader) extract(url, sha string) error {
@@ -163,7 +170,7 @@ func (l *Loader) extract(url, sha string) error {
 	}
 	parent := filepath.Dir(dest)
 	if err := os.MkdirAll(parent, 0o755); err != nil {
-		return fmt.Errorf("preparing the cache: %w", err)
+		return l.cacheError(err)
 	}
 	archive, err := runGitOutput(l.mirrorDir(url), "archive", "--format=tar", "--end-of-options", sha)
 	if err != nil {
@@ -171,7 +178,7 @@ func (l *Loader) extract(url, sha string) error {
 	}
 	tmp, err := os.MkdirTemp(parent, "extract-")
 	if err != nil {
-		return fmt.Errorf("preparing the cache: %w", err)
+		return l.cacheError(err)
 	}
 	defer os.RemoveAll(tmp)
 
@@ -179,7 +186,7 @@ func (l *Loader) extract(url, sha string) error {
 		return fmt.Errorf("unpacking %s from %s: %w", sha, url, err)
 	}
 	if err := os.Chmod(tmp, 0o755); err != nil {
-		return fmt.Errorf("preparing the cache: %w", err)
+		return l.cacheError(err)
 	}
 	if err := os.Rename(tmp, dest); err != nil {
 		return fmt.Errorf("populating the cache for %s: %w", url, err)

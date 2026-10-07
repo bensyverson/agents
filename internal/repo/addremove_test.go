@@ -72,6 +72,144 @@ func baseRepo(t *testing.T) string {
 	})
 }
 
+// openRemoving opens a repo the way `agents remove` does.
+func openRemoving(t *testing.T, dir string, opts Options) *Repo {
+	t.Helper()
+	r, err := OpenForRemove(dir, opts)
+	if err != nil {
+		t.Fatalf("OpenForRemove(%s): %v", dir, err)
+	}
+	return r
+}
+
+// A fresh `modules: []` is the state a repo is left in before its first
+// module: add fills it, where every verb that renders refuses it.
+func TestAddToAnEmptyManifest(t *testing.T) {
+	dir := newRepo(t, map[string]string{manifest.FileName: "modules: []\n"})
+
+	res := mustAdd(t, mustOpenSeeding(t, dir), "core")
+
+	if strings.Join(res.Added, ",") != "core" {
+		t.Errorf("Added = %v, want [core]", res.Added)
+	}
+	wantManifest(t, dir, "core")
+	if got := readFixture(t, dir, "AGENTS.md"); !strings.Contains(got, fresh("core", coreBody)) {
+		t.Errorf("AGENTS.md does not hold the core region:\n%s", got)
+	}
+	wantClean(t, dir)
+}
+
+func TestRenderingAnEmptyManifestIsRefused(t *testing.T) {
+	dir := newRepo(t, map[string]string{manifest.FileName: "modules: []\n"})
+	r := mustOpen(t, dir)
+
+	if _, err := r.Targets(); !errors.Is(err, manifest.ErrNoModules) {
+		t.Errorf("Targets error = %v, want ErrNoModules", err)
+	}
+	if _, err := r.Sync(false); !errors.Is(err, manifest.ErrNoModules) {
+		t.Errorf("Sync error = %v, want ErrNoModules", err)
+	}
+}
+
+// A manifest with sources: has left the embedded modules behind; a module only
+// the binary supplies is explained rather than blamed on a source that never
+// held it.
+func TestOpenExplainsEmbeddedModulesUnderSources(t *testing.T) {
+	hermeticGit(t)
+	pathDir := newPathSource(t)
+	dir := newRepo(t, map[string]string{
+		manifest.FileName: "sources:\n  - name: local\n    path: " + pathDir + "\nmodules:\n  - two\n  - core\n  - delegation\n  - nosuch\n",
+	})
+
+	_, err := Open(dir, testOptionsWith(t.TempDir(), FetchNever))
+
+	if _, ok := errors.AsType[*manifest.UnknownModulesError](err); !ok {
+		t.Fatalf("Open error = %v, want *manifest.UnknownModulesError", err)
+	}
+	for _, want := range []string{
+		"unknown modules in .agents.yaml: local/nosuch",
+		"core and delegation are example modules built into the binary, which a manifest with sources: does not use",
+		"run agents remove core delegation",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not contain %q", err, want)
+		}
+	}
+	if strings.Contains(err.Error(), "local/core") {
+		t.Errorf("error %q qualifies an embedded module with a source", err)
+	}
+}
+
+// The error above tells the user to run remove, so remove has to work on the
+// manifest that error describes — without resolving what it is removing.
+func TestRemoveEmbeddedModulesFromASourcesManifest(t *testing.T) {
+	hermeticGit(t)
+	pathDir := newPathSource(t)
+	dir := newRepo(t, map[string]string{
+		manifest.FileName: "sources:\n  - name: local\n    path: " + pathDir + "\nmodules:\n  - two\n  - core\n  - delegation\n",
+		"AGENTS.md":       projectHead + fresh("two", pathModuleBody) + "\n" + fresh("core", coreBody),
+		delegationPath:    fresh("delegation", delegationBody),
+	})
+	opts := testOptionsWith(t.TempDir(), FetchNever)
+	if _, err := Open(dir, opts); err == nil {
+		t.Fatal("Open succeeded on a manifest listing embedded modules under sources:")
+	}
+
+	res, err := openRemoving(t, dir, opts).Remove([]string{"core", "delegation"})
+	if err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+
+	if len(res.Regions) != 2 || !res.Regions[0].Present || !res.Regions[1].FileDeleted {
+		t.Errorf("Regions = %+v, want core's region removed and delegation's file deleted", res.Regions)
+	}
+	wantManifest(t, dir, "two")
+	got := readFixture(t, dir, "AGENTS.md")
+	if strings.Contains(got, "agents:begin core") || !strings.HasPrefix(got, projectHead) || !strings.Contains(got, fresh("two", pathModuleBody)) {
+		t.Errorf("AGENTS.md after remove:\n%s", got)
+	}
+	if fileExists(t, dir, delegationPath) {
+		t.Errorf("%s survived its module's removal", delegationPath)
+	}
+	if _, err := Open(dir, opts); err != nil {
+		t.Errorf("Open after remove: %v", err)
+	}
+}
+
+// A listed module that no source supplies and the binary does not either can
+// still be dropped: its region is found by name.
+func TestRemoveAnUnresolvableModuleByName(t *testing.T) {
+	hermeticGit(t)
+	pathDir := newPathSource(t)
+	dir := newRepo(t, map[string]string{
+		manifest.FileName: "sources:\n  - name: local\n    path: " + pathDir + "\nmodules:\n  - two\n  - ghost\n",
+		"AGENTS.md":       projectHead + fresh("two", pathModuleBody) + "\n" + fresh("ghost", "ghost rules\n"),
+	})
+
+	if _, err := openRemoving(t, dir, testOptionsWith(t.TempDir(), FetchNever)).Remove([]string{"ghost"}); err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+
+	wantManifest(t, dir, "two")
+	if got := readFixture(t, dir, "AGENTS.md"); strings.Contains(got, "ghost") {
+		t.Errorf("ghost's region survived:\n%s", got)
+	}
+}
+
+// Remove still refuses a name the manifest does not list, whether or not any
+// source supplies it.
+func TestRemoveStillRefusesWhatIsNotListed(t *testing.T) {
+	dir := baseRepo(t)
+	r := openRemoving(t, dir, testOptions())
+
+	if _, err := r.Remove([]string{"nosuch"}); !errors.Is(err, ErrUnknownModule) {
+		t.Errorf("Remove(nosuch) error = %v, want ErrUnknownModule", err)
+	}
+	if _, err := r.Remove([]string{"docs"}); !errors.Is(err, ErrNotEnabled) {
+		t.Errorf("Remove(docs) error = %v, want ErrNotEnabled", err)
+	}
+}
+
 func TestAddEnablesRendersAndSeeds(t *testing.T) {
 	dir := baseRepo(t)
 

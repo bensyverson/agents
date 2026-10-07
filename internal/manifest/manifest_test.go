@@ -63,8 +63,6 @@ func TestParseErrors(t *testing.T) {
 	}{
 		{"empty document", "", manifest.ErrNoModules},
 		{"no modules key", "other: 1\n", nil},
-		{"null modules", "modules:\n", manifest.ErrNoModules},
-		{"empty list", "modules: []\n", manifest.ErrNoModules},
 		{"duplicate names", "modules:\n  - core\n  - core\n", manifest.ErrDuplicateModule},
 		{"uppercase name", "modules:\n  - Core\n", manifest.ErrInvalidModuleName},
 		{"leading dash", "modules:\n  - -core\n", manifest.ErrInvalidModuleName},
@@ -84,6 +82,73 @@ func TestParseErrors(t *testing.T) {
 			}
 			if tt.want != nil && !errors.Is(err, tt.want) {
 				t.Errorf("Parse(%q) error = %v, want %v", tt.in, err, tt.want)
+			}
+		})
+	}
+}
+
+// An empty list is a manifest, not a mistake: it is what `agents add` fills.
+// The verbs that render refuse it through RequireModules.
+func TestParseAcceptsAnEmptyModuleList(t *testing.T) {
+	for _, in := range []string{"modules: []\n", "modules:\n"} {
+		m, err := manifest.Parse([]byte(in))
+		if err != nil {
+			t.Fatalf("Parse(%q): %v", in, err)
+		}
+		if len(m.Modules) != 0 {
+			t.Errorf("Parse(%q).Modules = %v, want none", in, m.Modules)
+		}
+		if err := m.RequireModules(); !errors.Is(err, manifest.ErrNoModules) {
+			t.Errorf("RequireModules(%q) = %v, want ErrNoModules", in, err)
+		}
+	}
+	full, err := manifest.Parse([]byte("modules:\n  - core\n"))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if err := full.RequireModules(); err != nil {
+		t.Errorf("RequireModules(core) = %v, want nil", err)
+	}
+}
+
+func TestUnknownModulesErrorExplainsEmbeddedModules(t *testing.T) {
+	tests := []struct {
+		name string
+		err  manifest.UnknownModulesError
+		want string
+	}{
+		{
+			"unknown only",
+			manifest.UnknownModulesError{Refs: []manifest.ModuleRef{{Source: "house", Name: "nosuch"}}, DefaultSource: "house"},
+			"unknown modules in .agents.yaml: house/nosuch",
+		},
+		{
+			"two embedded, bare",
+			manifest.UnknownModulesError{
+				Embedded:      []manifest.ModuleRef{{Source: "house", Name: "agents"}, {Source: "house", Name: "module-authoring"}},
+				DefaultSource: "house",
+			},
+			"agents and module-authoring are example modules built into the binary, which a manifest with sources: does not use; run agents remove agents module-authoring",
+		},
+		{
+			"one embedded, qualified",
+			manifest.UnknownModulesError{Embedded: []manifest.ModuleRef{{Source: "other", Name: "agents"}}, DefaultSource: "house"},
+			"other/agents is an example module built into the binary, which a manifest with sources: does not use; run agents remove other/agents",
+		},
+		{
+			"both kinds",
+			manifest.UnknownModulesError{
+				Refs:          []manifest.ModuleRef{{Source: "house", Name: "nosuch"}},
+				Embedded:      []manifest.ModuleRef{{Source: "house", Name: "agents"}},
+				DefaultSource: "house",
+			},
+			"unknown modules in .agents.yaml: house/nosuch; agents is an example module built into the binary, which a manifest with sources: does not use; run agents remove agents",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.err.Error(); got != tt.want {
+				t.Errorf("Error() =\n%q\nwant\n%q", got, tt.want)
 			}
 		})
 	}
@@ -193,12 +258,12 @@ func TestReadMissing(t *testing.T) {
 
 func TestReadInvalid(t *testing.T) {
 	path := filepath.Join(t.TempDir(), manifest.FileName)
-	if err := os.WriteFile(path, []byte("modules: []\n"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte("modules:\n  - core\n  - core\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 	_, err := manifest.Read(path)
-	if !errors.Is(err, manifest.ErrNoModules) {
-		t.Errorf("Read error = %v, want ErrNoModules", err)
+	if !errors.Is(err, manifest.ErrDuplicateModule) {
+		t.Errorf("Read error = %v, want ErrDuplicateModule", err)
 	}
 	if err != nil && !strings.Contains(err.Error(), manifest.FileName) {
 		t.Errorf("error = %q, want it to name the file", err)

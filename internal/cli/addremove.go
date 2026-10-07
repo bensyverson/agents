@@ -65,14 +65,22 @@ func removeCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return forEachRepo(cmd, opts, false, func(r *repo.Repo) error {
-				res, err := r.Remove(args)
-				if err != nil {
-					return err
-				}
-				printRemove(cmd.OutOrStdout(), res)
-				return nil
-			})
+			dirs, err := repoDirs(false)
+			if err != nil {
+				return err
+			}
+			// Not forEachRepo: a module cannot be required to resolve in order to
+			// be removed, and that is what Open demands.
+			r, err := repo.OpenForRemove(dirs[0], opts)
+			if err != nil {
+				return err
+			}
+			res, err := r.Remove(args)
+			if err != nil {
+				return err
+			}
+			printRemove(cmd.OutOrStdout(), res)
+			return nil
 		},
 	}
 }

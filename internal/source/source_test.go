@@ -403,6 +403,27 @@ func TestSourceWithoutTemplates(t *testing.T) {
 	}
 }
 
+// A cache that cannot be written is the user's to fix, and the error says how:
+// there is no silent fallback to a temporary directory, which would be cold on
+// every run and make the offline verbs ask for a sync that cannot stick.
+func TestFetchIntoAnUnwritableCacheNamesAgentsCache(t *testing.T) {
+	hermeticGit(t)
+	fx := newFixture(t)
+	blocker := filepath.Join(t.TempDir(), "file")
+	write(t, blocker, "not a directory\n")
+	cache := filepath.Join(blocker, "cache")
+
+	_, err := source.New(cache).Fetch(fx.bare, "v1")
+	if err == nil {
+		t.Fatal("Fetch into an unwritable cache succeeded")
+	}
+	for _, want := range []string{source.CacheEnv, cache, "writable"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not mention %q", err, want)
+		}
+	}
+}
+
 func TestDefaultCacheDir(t *testing.T) {
 	t.Run("AGENTS_CACHE wins", func(t *testing.T) {
 		t.Setenv("AGENTS_CACHE", "/tmp/explicit")

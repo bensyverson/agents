@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/bensyverson/agents/internal/manifest"
 )
 
 const (
@@ -33,6 +35,77 @@ func head(t *testing.T, repoDir string) string {
 		t.Fatalf("AGENTS.md has no region:\n%s", doc)
 	}
 	return before
+}
+
+// writeSourcesManifest writes a manifest naming the fixture source and these
+// module entries, one per line.
+func writeSourcesManifest(t *testing.T, repoDir, sourceDir string, entries ...string) {
+	t.Helper()
+	body := "sources:\n  - name: " + sourceName + "\n    path: " + sourceDir + "\nmodules:"
+	if len(entries) == 0 {
+		body += " []\n"
+	}
+	for _, e := range entries {
+		body += "\n  - " + e
+	}
+	if err := os.WriteFile(filepath.Join(repoDir, ".agents.yaml"), []byte(body+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAddOnAnEmptyManifest(t *testing.T) {
+	repoDir, sourceDir, _ := fixture(t)
+	writeSourcesManifest(t, repoDir, sourceDir)
+
+	stdout, _, err := run(t, "add", "principles")
+	if err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	if !strings.Contains(stdout, "enabled principles") {
+		t.Errorf("add output:\n%s", stdout)
+	}
+	if got := readAgents(t, repoDir); !strings.Contains(got, principlesBody) {
+		t.Errorf("AGENTS.md does not hold the principles region:\n%s", got)
+	}
+	if _, _, err := run(t, "check"); err != nil {
+		t.Errorf("check after add: %v", err)
+	}
+}
+
+func TestEmbeddedModulesUnderSourcesAreExplainedAndRemovable(t *testing.T) {
+	repoDir, sourceDir, _ := fixture(t)
+	writeSourcesManifest(t, repoDir, sourceDir, "core", "agents", "module-authoring")
+
+	_, _, err := run(t, "check")
+	if err == nil {
+		t.Fatal("check succeeded on a manifest listing embedded modules under sources:")
+	}
+	for _, want := range []string{
+		"agents and module-authoring are example modules built into the binary",
+		"run agents remove agents module-authoring",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not contain %q", err, want)
+		}
+	}
+
+	stdout, _, err := run(t, "remove", "agents", "module-authoring")
+	if err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	if !strings.Contains(stdout, "disabled agents") || !strings.Contains(stdout, "disabled module-authoring") {
+		t.Errorf("remove output:\n%s", stdout)
+	}
+	m, err := manifest.Read(filepath.Join(repoDir, manifest.FileName))
+	if err != nil {
+		t.Fatalf("reading the manifest: %v", err)
+	}
+	if got := strings.Join(m.Entries(), ","); got != "core" {
+		t.Errorf("manifest lists %q, want core", got)
+	}
+	if _, _, err := run(t, "sync"); err != nil {
+		t.Errorf("sync after remove: %v", err)
+	}
 }
 
 func TestAddEnablesRendersAndInstallsTheFile(t *testing.T) {

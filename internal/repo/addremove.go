@@ -150,11 +150,14 @@ func (r *Repo) Remove(names []string) (RemoveResult, error) {
 	var refs []manifest.ModuleRef
 	for _, name := range names {
 		ref, err := r.Manifest.Ref(name)
+		listed := err == nil && slices.Contains(r.Manifest.Modules, ref)
 		switch {
-		case err != nil || !r.knows(ref):
+		case err != nil:
 			unknown = append(unknown, name)
-		case !slices.Contains(r.Manifest.Modules, ref):
+		case !listed && r.knows(ref):
 			disabled = append(disabled, name)
+		case !listed:
+			unknown = append(unknown, name)
 		case slices.Contains(refs, ref):
 			// Named twice; once is enough.
 		default:
@@ -174,14 +177,13 @@ func (r *Repo) Remove(names []string) (RemoveResult, error) {
 	if len(kept) == 0 {
 		return RemoveResult{}, wrapNames(ErrNoModulesLeft, res.Removed)
 	}
-	next, err := r.with(kept)
-	if err != nil {
-		return RemoveResult{}, err
-	}
+	// What stays is resolved only as far as it can be: another entry that no
+	// source supplies is not this removal's to refuse.
+	mods, origin := r.Sources.resolveAvailable(manifest.Manifest{Sources: r.Manifest.Sources, Modules: kept})
+	next := &Repo{Dir: r.Dir, Manifest: manifest.Manifest{Sources: r.Manifest.Sources, Modules: kept}, Sources: r.Sources, Seeds: r.Seeds, mods: mods, origin: origin}
 
 	for _, ref := range refs {
-		mod, _ := r.Sources.module(ref)
-		removed, err := r.removeRegion(mod)
+		removed, err := r.removeRegion(r.removalModule(ref))
 		res.Regions = append(res.Regions, removed)
 		if err != nil {
 			return res, err
