@@ -7,15 +7,22 @@
 package source
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
+
+	"gopkg.in/yaml.v3"
 )
 
 // Directory names a source must use at its root.
 const (
 	ModulesDir   = "modules"
 	TemplatesDir = "templates"
+	// SourceFile is the optional file at a source's root that describes the
+	// source itself rather than any module in it.
+	SourceFile = "source.yaml"
 )
 
 // Errors reported by the loaders. Each is wrapped with the source's name.
@@ -27,6 +34,10 @@ var (
 	ErrUnknownRef = errors.New("unknown ref")
 	// ErrNoModules means the directory is not a source: it has no modules/.
 	ErrNoModules = errors.New("source has no modules directory")
+	// ErrSourceFile means source.yaml exists and cannot be read as a source
+	// description. A typo there is an error rather than a source that quietly
+	// declares nothing.
+	ErrSourceFile = errors.New("invalid " + SourceFile)
 )
 
 // Source is a loaded source: the modules and templates it holds and the commit
@@ -45,6 +56,14 @@ type Source struct {
 	// Commit is the full sha a git source was loaded at; empty for a path or
 	// embedded source, which have no pin.
 	Commit string
+	// Defaults are the modules the source recommends a fresh repo enable, in
+	// render order, as source.yaml declares them. Empty when it declares none.
+	Defaults []string
+}
+
+// description is what source.yaml holds.
+type description struct {
+	Defaults []string `yaml:"defaults"`
 }
 
 // FromFS opens a source rooted at fsys — what the binary's embedded example
@@ -67,5 +86,28 @@ func open(name string, root fs.FS, commit string) (Source, error) {
 	if err != nil {
 		return Source{}, fmt.Errorf("source %q: %w", name, err)
 	}
-	return Source{Name: name, Modules: modules, Templates: templates, Commit: commit}, nil
+	defaults, err := readDefaults(name, root)
+	if err != nil {
+		return Source{}, err
+	}
+	return Source{Name: name, Modules: modules, Templates: templates, Commit: commit, Defaults: defaults}, nil
+}
+
+// readDefaults reads source.yaml at a source's root; a source without one
+// declares no defaults.
+func readDefaults(name string, root fs.FS) ([]string, error) {
+	body, err := fs.ReadFile(root, SourceFile)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return nil, nil
+	case err != nil:
+		return nil, fmt.Errorf("source %q: reading %s: %w", name, SourceFile, err)
+	}
+	var d description
+	dec := yaml.NewDecoder(bytes.NewReader(body))
+	dec.KnownFields(true)
+	if err := dec.Decode(&d); err != nil && !errors.Is(err, io.EOF) {
+		return nil, fmt.Errorf("source %q: %w: %w", name, ErrSourceFile, err)
+	}
+	return d.Defaults, nil
 }

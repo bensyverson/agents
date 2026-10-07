@@ -85,7 +85,7 @@ func fixture(t *testing.T) (repoDir, sourceDir, registryPath string) {
 
 func initRepo(t *testing.T, sourceDir string) {
 	t.Helper()
-	stdout, stderr, err := run(t, "init", "--source", sourceDir, "--with", "core,principles")
+	stdout, stderr, err := run(t, "init", sourceDir, "--with", "core,principles")
 	if err != nil {
 		t.Fatalf("init: %v (stderr %s)", err, stderr)
 	}

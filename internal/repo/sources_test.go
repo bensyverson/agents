@@ -278,30 +278,3 @@ func TestInitWithNoSourceWritesNoSourcesBlock(t *testing.T) {
 		t.Errorf("%s does not hold the embedded module's region:\n%s", AgentsFile, got)
 	}
 }
-
-// A directory that exists is a path source; anything else is a git URL. The
-// name is the last segment, without any .git.
-func TestParseSource(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "house-rules")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	for _, tc := range []struct {
-		spec string
-		want manifest.Source
-	}{
-		{dir, manifest.Source{Name: "house-rules", Path: dir}},
-		{"https://example.com/team/house.git", manifest.Source{Name: "house", Git: "https://example.com/team/house.git"}},
-		{"git@example.com:team/house-rules.git", manifest.Source{Name: "house-rules", Git: "git@example.com:team/house-rules.git"}},
-		{"https://example.com/team/house", manifest.Source{Name: "house", Git: "https://example.com/team/house"}},
-	} {
-		got, err := ParseSource(tc.spec)
-		if err != nil {
-			t.Errorf("ParseSource(%q): %v", tc.spec, err)
-			continue
-		}
-		if got != tc.want {
-			t.Errorf("ParseSource(%q) = %+v, want %+v", tc.spec, got, tc.want)
-		}
-	}
-}

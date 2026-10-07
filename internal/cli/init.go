@@ -12,40 +12,35 @@ import (
 	"github.com/bensyverson/agents/internal/repo"
 )
 
-const (
-	// withFlag names the module list.
-	withFlag = "with"
-	// sourceFlag names where those modules come from.
-	sourceFlag = "source"
-)
+// withFlag names the module list.
+const withFlag = "with"
 
 func initCmd() *cobra.Command {
-	var (
-		with []string
-		spec string
-	)
+	var with []string
 	cmd := &cobra.Command{
-		Use:   "init",
+		Use:   "init [source]",
 		Short: "Make the current directory a managed repo",
 		Long: "Write " + manifest.FileName + ", render " + repo.AgentsFile + " (existing content becomes the\n" +
 			"project-owned head), create any file the chosen modules seed (" + repo.GotchasFile + "\n" +
 			"among them), link " + repo.ClaudeFile + ", and register the repo. Every step is\n" +
 			"skipped, not repeated, if it is already done.\n\n" +
-			"--source names where the modules come from: a directory that exists is a path\n" +
-			"source, anything else a git URL, and the source is named after its last path\n" +
-			"segment. A git ref is resolved and the sha written into " + manifest.FileName + ". It\n" +
-			"requires --with, since only the source knows what it holds. Without --source\n" +
-			"the modules built into the binary are used and no source is listed; more\n" +
-			"sources can be added to " + manifest.FileName + " by hand at any time.",
-		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
+			"source is where the modules come from: a directory that exists is a path\n" +
+			"source, a host/path such as github.com/owner/repo is fetched over HTTPS, and\n" +
+			"anything else is handed to git as typed. The source is named after its last\n" +
+			"path segment, and its ref is resolved and the sha written into " + manifest.FileName + ".\n" +
+			"Without a source the modules built into the binary are used and none is\n" +
+			"listed; `agents source add` adds one later.\n\n" +
+			"Which modules are enabled is --with, else the defaults the source declares in\n" +
+			"its source.yaml; a source that declares none requires --with.",
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
 			opts, err := openOptions(repo.FetchMissing)
 			if err != nil {
 				return err
 			}
 			var src manifest.Source
-			if spec != "" {
-				if src, err = repo.ParseSource(spec); err != nil {
+			if len(args) == 1 {
+				if src, err = manifest.ParseSource(args[0]); err != nil {
 					return err
 				}
 			}
@@ -57,16 +52,8 @@ func initCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("locating the working directory: %w", err)
 			}
-			// The flag carries the defaults so `--help` names them, but init
-			// must know whether the caller actually said which modules it
-			// wants: with a --source of someone else's, the defaults are the
-			// wrong answer rather than a fallback.
-			var modules []string
-			if cmd.Flags().Changed(withFlag) {
-				modules = with
-			}
 			res, err := repo.Init(dir, repo.InitOptions{
-				Modules:      modules,
+				Modules:      with,
 				Source:       src,
 				Open:         opts,
 				RegistryPath: path,
@@ -84,9 +71,7 @@ func initCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringSliceVar(&with, withFlag, repo.DefaultModules(), "modules to render, in order")
-	cmd.Flags().StringVar(&spec, sourceFlag, "",
-		"git URL or directory holding modules/ and templates/, and requires --with;\nomitted, the example modules built into the binary are used")
+	cmd.Flags().StringSliceVar(&with, withFlag, nil, "modules to render, in order (default: the source's declared defaults)")
 	return cmd
 }
 
@@ -122,10 +107,10 @@ func printInit(out io.Writer, res repo.InitResult) {
 }
 
 // sourceLine names the source the repo renders from. With none listed that is
-// the one the binary carries, and the line says where others would go.
+// the one the binary carries, and the line says how to add another.
 func sourceLine(src manifest.Source) string {
 	if src.Name == "" {
-		return "using the modules built into the binary; list other sources in " + manifest.FileName
+		return "using the modules built into the binary; `agents source add` adds another source to " + manifest.FileName
 	}
 	if src.Path != "" {
 		return "source " + src.Name + ": " + src.Path

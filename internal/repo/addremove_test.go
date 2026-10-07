@@ -103,7 +103,7 @@ func TestRenderingAnEmptyManifestIsRefused(t *testing.T) {
 	dir := newRepo(t, map[string]string{manifest.FileName: "modules: []\n"})
 	r := mustOpen(t, dir)
 
-	if _, err := r.Targets(); !errors.Is(err, manifest.ErrNoModules) {
+	if _, err := r.Targets(); !errors.Is(err, manifest.ErrNoModules) || !strings.Contains(err.Error(), "agents add") {
 		t.Errorf("Targets error = %v, want ErrNoModules", err)
 	}
 	if _, err := r.Sync(false); !errors.Is(err, manifest.ErrNoModules) {
@@ -453,17 +453,22 @@ func TestRemoveUnknownOrDisabledModuleIsAnError(t *testing.T) {
 	}
 }
 
-// An empty manifest is not a manifest the tool can write, so emptying it is a
-// refusal rather than a broken repo.
-func TestRemoveEveryModuleIsRefused(t *testing.T) {
+// Removing the last module leaves an empty list, which `agents add` refills:
+// the same state `agents source add` leaves when it swaps out the examples.
+func TestRemoveEveryModuleLeavesAnEmptyList(t *testing.T) {
 	dir := baseRepo(t)
-	before := snapshot(t, dir)
 
-	_, err := mustOpen(t, dir).Remove([]string{"core", "principles"})
-	if !errors.Is(err, ErrNoModulesLeft) {
-		t.Fatalf("Remove error = %v, want ErrNoModulesLeft", err)
+	if _, err := mustOpen(t, dir).Remove([]string{"core", "principles"}); err != nil {
+		t.Fatalf("Remove: %v", err)
 	}
-	if got := snapshot(t, dir); !maps.Equal(got, before) {
-		t.Errorf("a refused remove wrote something: %v -> %v", before, got)
+	m, err := manifest.Read(filepath.Join(dir, manifest.FileName))
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if len(m.Modules) != 0 {
+		t.Errorf("modules = %v, want none", m.Entries())
+	}
+	if got := readFile(t, filepath.Join(dir, AgentsFile)); strings.Contains(got, "agents:begin") {
+		t.Errorf("AGENTS.md still holds a region:\n%s", got)
 	}
 }

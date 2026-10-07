@@ -80,7 +80,7 @@ func pushModule(t *testing.T, url, body string) string {
 // managedRepo makes a repo pinned to the git source at sha, renders it and
 // registers it, and leaves the working directory there. init is what registers
 // it; the manifest is written first because a local bare repository is a
-// directory, which `--source` would read as a path source.
+// directory, which `init <spec>` would read as a path source.
 func managedRepo(t *testing.T, url, sha string) string {
 	t.Helper()
 	dir := t.TempDir()

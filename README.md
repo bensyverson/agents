@@ -20,16 +20,19 @@ agents list                 # what your sources offer, * on what's enabled
 agents add <module>         # enable another one
 ```
 
-With no `--source`, `init` uses the two example modules the binary embeds — enough to see the shape of it, offline. To render somebody's real rules, name the source they live in:
+With no source, `init` uses the two example modules the binary embeds — enough to see the shape of it, offline. To render somebody's real rules, name the source they live in; `init` enables the modules it declares as defaults:
 
 ```
-agents init --source https://github.com/bensyverson/agents-md --with core,principles,stage-build
+agents init github.com/bensyverson/agents-md
+agents add stage-build go   # a stage and a stack on top
 agents update               # move the pin and see what the rules now say
 ```
 
+A repo that already exists takes a source with `agents source add github.com/bensyverson/agents-md`, then `agents add` for the modules it wants.
+
 ## Workflow
 
-My own house style lives in [bensyverson/agents-md](https://github.com/bensyverson/agents-md), the source above: it is what is working for me at the moment, and it will always represent my current recommendations and best practices. Fork it, or write a source of your own — a git repository, or a directory, with `modules/` and `templates/` at its root — and point `agents init --source` at it. `.agents.yaml` pins each git source to a commit, so nobody's edit changes what your agents read until you run `agents update`.
+My own house style lives in [bensyverson/agents-md](https://github.com/bensyverson/agents-md), the source above: it is what is working for me at the moment, and it will always represent my current recommendations and best practices. Fork it, or write a source of your own — a git repository, or a directory, with `modules/` and `templates/` at its root — and point `agents init` or `agents source add` at it. `.agents.yaml` pins each git source to a commit, so nobody's edit changes what your agents read until you run `agents update`.
 
 ## Learn more
 

@@ -2,6 +2,7 @@ package agents
 
 import (
 	"io/fs"
+	"slices"
 	"testing"
 
 	"github.com/bensyverson/agents/internal/module"
@@ -55,6 +56,18 @@ func TestEmbeddedSubtreesMatchTheSource(t *testing.T) {
 		if len(got) != len(want) {
 			t.Errorf("%s: source holds %v, %s() holds %v", pair.what, got, pair.what, want)
 		}
+	}
+}
+
+// The tool names no module of its own: the embedded source declares which of
+// its modules a bare `agents init` enables, like any other source.
+func TestEmbeddedSourceDeclaresItsDefaults(t *testing.T) {
+	src, err := source.FromFS("embedded", Embedded())
+	if err != nil {
+		t.Fatalf("source.FromFS(Embedded()): %v", err)
+	}
+	if want := []string{"agents", "module-authoring"}; !slices.Equal(src.Defaults, want) {
+		t.Errorf("Defaults = %v, want %v", src.Defaults, want)
 	}
 }
 

@@ -174,10 +174,25 @@ func TestMarshalCanonicalForm(t *testing.T) {
 	}
 }
 
-func TestMarshalRejectsInvalid(t *testing.T) {
-	if _, err := manifest.Marshal(manifest.Manifest{}); !errors.Is(err, manifest.ErrNoModules) {
-		t.Errorf("Marshal(empty) error = %v, want ErrNoModules", err)
+// An empty module list is a state the tool writes — `agents source add` leaves
+// one when it swaps out the example modules, and `agents add` fills it — so it
+// must round-trip rather than be refused.
+func TestMarshalWritesAnEmptyModuleList(t *testing.T) {
+	src := manifest.Source{Name: "house", Path: "../house"}
+	data, err := manifest.Marshal(manifest.Manifest{Sources: []manifest.Source{src}})
+	if err != nil {
+		t.Fatalf("Marshal(no modules): %v", err)
 	}
+	m, err := manifest.Parse(data)
+	if err != nil {
+		t.Fatalf("Parse(%q): %v", data, err)
+	}
+	if len(m.Modules) != 0 || len(m.Sources) != 1 || m.Sources[0] != src {
+		t.Errorf("round trip = %+v", m)
+	}
+}
+
+func TestMarshalRejectsInvalid(t *testing.T) {
 	if _, err := manifest.Marshal(manifest.Manifest{Modules: exampleRefs("core", "core")}); !errors.Is(err, manifest.ErrDuplicateModule) {
 		t.Errorf("Marshal(dupes) error = %v, want ErrDuplicateModule", err)
 	}
@@ -242,11 +257,11 @@ func TestWriteThenRead(t *testing.T) {
 
 func TestWriteRejectsInvalid(t *testing.T) {
 	path := filepath.Join(t.TempDir(), manifest.FileName)
-	if err := manifest.Write(path, manifest.Manifest{}); err == nil {
-		t.Fatal("Write(empty) = nil error, want one")
+	if err := manifest.Write(path, manifest.Manifest{Modules: exampleRefs("core", "core")}); err == nil {
+		t.Fatal("Write(dupes) = nil error, want one")
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		t.Errorf("Write(empty) created %s; an invalid manifest must not reach disk", path)
+		t.Errorf("Write(dupes) created %s; an invalid manifest must not reach disk", path)
 	}
 }
 

@@ -20,9 +20,6 @@ var (
 	// ErrNotEnabled means the manifest does not list the module, so there is
 	// nothing to remove.
 	ErrNotEnabled = errors.New("module is not enabled")
-	// ErrNoModulesLeft means the removal would empty the manifest, which is not
-	// a manifest the tool can write.
-	ErrNoModulesLeft = errors.New("that would leave no modules")
 	// ErrNoModulesGiven means the caller named nothing to do.
 	ErrNoModulesGiven = errors.New("no modules given")
 )
@@ -174,9 +171,6 @@ func (r *Repo) Remove(names []string) (RemoveResult, error) {
 	kept := slices.DeleteFunc(slices.Clone(r.Manifest.Modules), func(ref manifest.ModuleRef) bool {
 		return slices.Contains(refs, ref)
 	})
-	if len(kept) == 0 {
-		return RemoveResult{}, wrapNames(ErrNoModulesLeft, res.Removed)
-	}
 	// What stays is resolved only as far as it can be: another entry that no
 	// source supplies is not this removal's to refuse.
 	mods, origin := r.Sources.resolveAvailable(manifest.Manifest{Sources: r.Manifest.Sources, Modules: kept})

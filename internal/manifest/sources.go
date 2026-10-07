@@ -1,7 +1,11 @@
 package manifest
 
 import (
+	"errors"
 	"fmt"
+	"os"
+	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -22,6 +26,51 @@ type Source struct {
 	Git  string `yaml:"git,omitempty"`
 	Path string `yaml:"path,omitempty"`
 	Ref  string `yaml:"ref,omitempty"`
+}
+
+// ErrNoSourceGiven means a source spec was empty.
+var ErrNoSourceGiven = errors.New("no source given")
+
+// scpStyle matches git's `user@host:path` shorthand for ssh, which has no
+// scheme but is not a host/path either.
+var scpStyle = regexp.MustCompile(`^[^/@:]+@[^/:]+:`)
+
+// ParseSource reads a source spec — what `agents init` and `agents source add`
+// take. A spec naming a directory that exists is a path source. A scheme-less
+// host/path — no `://`, not scp-style, and a first segment that has a dot and
+// does not start with one, as github.com/owner/repo does — is HTTPS. Anything
+// else is a git URL as typed, because a mistyped path should fail loudly at the
+// clone rather than quietly become an empty source. The source's name is the
+// last path segment with any .git suffix removed.
+func ParseSource(spec string) (Source, error) {
+	trimmed := strings.TrimRight(spec, "/")
+	if trimmed == "" {
+		return Source{}, ErrNoSourceGiven
+	}
+	if info, err := os.Stat(spec); err == nil && info.IsDir() {
+		return Source{Name: sourceName(trimmed), Path: spec}, nil
+	}
+	if isHostPath(trimmed) {
+		trimmed = "https://" + trimmed
+		return Source{Name: sourceName(trimmed), Git: trimmed}, nil
+	}
+	return Source{Name: sourceName(trimmed), Git: spec}, nil
+}
+
+// isHostPath reports whether spec is `host/path` with no scheme.
+func isHostPath(spec string) bool {
+	if strings.Contains(spec, "://") || scpStyle.MatchString(spec) {
+		return false
+	}
+	host, _, ok := strings.Cut(spec, "/")
+	return ok && strings.Contains(host, ".") && !strings.HasPrefix(host, ".") && !strings.Contains(host, ":")
+}
+
+// sourceName is the last segment of a URL or path, without a .git suffix.
+// Whether the result is a usable name is validateSources's judgement, not this
+// function's: it reports every other invalid name too.
+func sourceName(spec string) string {
+	return strings.TrimSuffix(path.Base(filepath.ToSlash(spec)), ".git")
 }
 
 // ModuleRef is one manifest entry: a module and the source it comes from. In

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -15,48 +14,18 @@ import (
 	"github.com/bensyverson/agents/internal/source"
 )
 
-// DefaultModules is what a repo gets when init is given no module list: the
-// two modules the binary embeds, which are the only ones a fresh install is
-// certain to have.
-func DefaultModules() []string { return []string{"agents", "module-authoring"} }
-
-// ErrNoSourceGiven means a source spec was empty.
-var ErrNoSourceGiven = errors.New("no source given")
-
-// ErrModulesRequired says init was given a source but no module list. The
-// defaults name the modules the binary embeds, so they mean nothing for
-// somebody else's source: which of its modules to enable is the caller's to
-// say, and guessing would render a manifest nobody asked for.
-var ErrModulesRequired = errors.New("--with is required with --source: name the modules to enable (its modules/*.md)")
-
-// ParseSource reads a source spec — what `agents init --source` takes. A spec
-// naming a directory that exists is a path source; anything else is a git URL,
-// because a URL is never a directory and a mistyped path should fail loudly at
-// the clone rather than quietly become an empty source. The source's name is
-// the last path segment with any .git suffix removed.
-func ParseSource(spec string) (manifest.Source, error) {
-	trimmed := strings.TrimRight(spec, "/")
-	if trimmed == "" {
-		return manifest.Source{}, ErrNoSourceGiven
-	}
-	if info, err := os.Stat(spec); err == nil && info.IsDir() {
-		return manifest.Source{Name: sourceName(trimmed), Path: spec}, nil
-	}
-	return manifest.Source{Name: sourceName(trimmed), Git: spec}, nil
-}
-
-// sourceName is the last segment of a URL or path, without a .git suffix.
-// Whether the result is a usable name is the manifest's judgement, not this
-// function's: it reports every other invalid name too.
-func sourceName(spec string) string {
-	return strings.TrimSuffix(path.Base(filepath.ToSlash(spec)), ".git")
-}
+// ErrModulesRequired says init was given no module list and the default
+// source declares none. The tool names no module of its own, so which of a
+// source's modules to enable is the source's to say (source.yaml defaults) or
+// the caller's (--with); guessing would render a manifest nobody asked for.
+var ErrModulesRequired = errors.New("no modules to enable")
 
 // InitOptions is everything init needs from its caller; nothing is read from
 // the environment here, so tests never touch a real home directory.
 type InitOptions struct {
-	// Modules is the manifest to write; empty means DefaultModules, and is
-	// ErrModulesRequired when Source names a source of someone else's.
+	// Modules is the manifest to write. Empty means the default source's
+	// declared defaults — or, in a repo that already has a manifest, whatever
+	// that manifest lists — and is ErrModulesRequired when there are none.
 	Modules []string
 	// Source is the one source the new manifest names. The zero value writes
 	// no sources: block at all, so the repo renders from the source the binary
@@ -165,27 +134,7 @@ func sourceNames(sources []manifest.Source) string {
 // content — it becomes the project-owned head and the regions are appended —
 // so pruning stays a human step.
 func Init(dir string, opts InitOptions) (InitResult, error) {
-	modules := opts.Modules
-	if len(modules) == 0 {
-		if opts.Source.Name != "" {
-			return InitResult{Dir: dir, RegistryPath: opts.RegistryPath}, ErrModulesRequired
-		}
-		modules = DefaultModules()
-	}
-	res := InitResult{Dir: dir, Modules: modules, RegistryPath: opts.RegistryPath}
-
-	refs := make([]manifest.ModuleRef, 0, len(modules))
-	for _, name := range modules {
-		ref, err := manifest.ParseRef(name)
-		if err != nil {
-			return res, fmt.Errorf("%s: %w", dir, err)
-		}
-		refs = append(refs, ref)
-	}
-	wanted := manifest.Manifest{Modules: refs}
-	if opts.Source.Name != "" {
-		wanted.Sources = []manifest.Source{opts.Source}
-	}
+	res := InitResult{Dir: dir, RegistryPath: opts.RegistryPath}
 
 	// A manifest the repo already has wins: init never edits one a human
 	// curated, and says so rather than rewriting it.
@@ -193,29 +142,23 @@ func Init(dir string, opts InitOptions) (InitResult, error) {
 	if err != nil {
 		return res, err
 	}
+	wanted := manifest.Manifest{}
+	if opts.Source.Name != "" {
+		wanted.Sources = []manifest.Source{opts.Source}
+	}
 	if hasManifest {
-		if err := agrees(dir, existing, wanted); err != nil {
+		if err := agreesOnSources(dir, existing, wanted); err != nil {
 			return res, err
 		}
-		wanted = existing
+		wanted.Sources = existing.Sources
 	}
 
-	// Decision 7: the manifest records the sha the ref resolved to, so the
-	// repo is pinned even when the human asked for a branch. The ref is
-	// resolved against the remote, as `agents update` does: the cache only
-	// knows the commit it last fetched under that name, which on a machine
-	// that fetched the source weeks ago is weeks old. An existing manifest
-	// keeps its own pin; moving one is `agents update`'s job.
+	// The manifest records the sha the ref resolved to, so the repo is pinned
+	// even when the human asked for a branch. An existing manifest keeps its
+	// own pin; moving one is `agents update`'s job.
 	if !hasManifest && len(wanted.Sources) == 1 {
-		if s := &wanted.Sources[0]; s.Git != "" && !source.IsFullSha(s.Ref) {
-			if opts.Open.Loader == nil {
-				return res, fmt.Errorf("%s: %w for source %q", dir, ErrNoLoader, s.Name)
-			}
-			sha, err := pinRemote(opts.Open.Loader, s.Git, s.Ref)
-			if err != nil {
-				return res, fmt.Errorf("%s: %w", dir, err)
-			}
-			s.Ref = sha
+		if err := pinSource(opts.Open.Loader, &wanted.Sources[0]); err != nil {
+			return res, fmt.Errorf("%s: %w", dir, err)
 		}
 	}
 	sources, err := LoadSources(dir, wanted, opts.Open)
@@ -224,6 +167,27 @@ func Init(dir string, opts InitOptions) (InitResult, error) {
 	}
 	if len(wanted.Sources) == 1 {
 		res.Source = wanted.Sources[0]
+	}
+
+	modules, err := initModules(opts.Modules, existing, hasManifest, sources, wanted.DefaultSource())
+	if err != nil {
+		return res, fmt.Errorf("%s: %w", dir, err)
+	}
+	res.Modules = modules
+	refs := make([]manifest.ModuleRef, 0, len(modules))
+	for _, name := range modules {
+		ref, err := manifest.ParseRef(name)
+		if err != nil {
+			return res, fmt.Errorf("%s: %w", dir, err)
+		}
+		refs = append(refs, ref)
+	}
+	wanted.Modules = refs
+	if hasManifest {
+		if err := agreesOnModules(dir, existing, wanted); err != nil {
+			return res, err
+		}
+		wanted = existing
 	}
 
 	if _, err := manifest.Marshal(wanted); err != nil {
@@ -263,6 +227,23 @@ func Init(dir string, opts InitOptions) (InitResult, error) {
 	return res, nil
 }
 
+// initModules is the module list init works from: the caller's, else the one
+// the repo's manifest already holds, else the default source's declared
+// defaults. The tool names none of its own.
+func initModules(given []string, existing manifest.Manifest, hasManifest bool, sources Sources, defaultSource string) ([]string, error) {
+	switch {
+	case len(given) > 0:
+		return given, nil
+	case hasManifest:
+		return existing.Entries(), nil
+	}
+	if defaults := sources[defaultSource].Source.Defaults; len(defaults) > 0 {
+		return defaults, nil
+	}
+	return nil, fmt.Errorf("%w: source %q declares no default modules (defaults: in its %s); name them with --with",
+		ErrModulesRequired, defaultSource, source.SourceFile)
+}
+
 // templatesOf is the templates of one loaded source, or nil when nothing goes
 // by that name.
 func (s Sources) templatesOf(name string) fs.FS {
@@ -286,22 +267,25 @@ func readExisting(dir string) (manifest.Manifest, bool, error) {
 	return manifest.Manifest{}, false, err
 }
 
-// agrees reports whether an existing manifest is the one init was asked for.
-// The module lists must match exactly; a named source must match by name and
-// location, but not by ref — the repo's own pin stands, and moving it is
-// `agents update`'s job.
-func agrees(dir string, existing, wanted manifest.Manifest) error {
-	if !slices.Equal(existing.Entries(), wanted.Entries()) {
-		return &ManifestConflictError{Dir: dir, Existing: existing.Entries(), Requested: wanted.Entries()}
-	}
-	if len(wanted.Sources) == 0 {
-		return nil
-	}
+// agreesOnSources reports whether an existing manifest names the source init
+// was asked for: by name and location, but not by ref — the repo's own pin
+// stands, and moving it is `agents update`'s job. No requested source agrees
+// with anything.
+func agreesOnSources(dir string, existing, wanted manifest.Manifest) error {
 	for _, want := range wanted.Sources {
 		got, ok := existing.SourceByName(want.Name)
 		if !ok || got.Git != want.Git || got.Path != want.Path {
 			return &SourceConflictError{Dir: dir, Existing: existing.Sources, Requested: wanted.Sources}
 		}
+	}
+	return nil
+}
+
+// agreesOnModules reports whether an existing manifest lists exactly the
+// modules init was asked for.
+func agreesOnModules(dir string, existing, wanted manifest.Manifest) error {
+	if !slices.Equal(existing.Entries(), wanted.Entries()) {
+		return &ManifestConflictError{Dir: dir, Existing: existing.Entries(), Requested: wanted.Entries()}
 	}
 	return nil
 }

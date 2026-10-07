@@ -127,10 +127,11 @@ func Parse(data []byte) (Manifest, error) {
 }
 
 // RequireModules is the check every verb that renders makes: a manifest with
-// no modules is valid to read and to add to, but there is nothing to render.
+// no modules is valid to read, write and add to, but there is nothing to
+// render.
 func (m Manifest) RequireModules() error {
 	if len(m.Modules) == 0 {
-		return ErrNoModules
+		return fmt.Errorf("%w; `agents add <module>` enables one", ErrNoModules)
 	}
 	return nil
 }
@@ -139,9 +140,6 @@ func (m Manifest) RequireModules() error {
 // error rather than a file someone has to clean up later.
 func Marshal(m Manifest) ([]byte, error) {
 	m = m.withDefaults()
-	if err := m.RequireModules(); err != nil {
-		return nil, err
-	}
 	if err := m.validate(); err != nil {
 		return nil, err
 	}

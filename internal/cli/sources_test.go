@@ -30,7 +30,7 @@ func readFile(t *testing.T, path string) string {
 	return string(b)
 }
 
-// With neither --source nor --with, init writes no sources: block, enables the
+// With neither a source nor --with, init writes no sources: block, enables the
 // two modules the binary carries, and says where other sources go.
 func TestInitWithNoSourceUsesTheEmbeddedModules(t *testing.T) {
 	dir := emptyRepo(t)
@@ -53,21 +53,21 @@ func TestInitWithNoSourceUsesTheEmbeddedModules(t *testing.T) {
 	}
 }
 
-// The defaults name the embedded example modules, so they are meaningless for
-// a source of someone else's: --source without --with is one line of refusal,
-// and nothing is written.
-func TestInitWithASourceRequiresWith(t *testing.T) {
+// A source that declares no defaults leaves init nothing to guess: one line of
+// refusal naming the source and where defaults would go, and nothing written.
+func TestInitWithASourceThatDeclaresNoDefaultsRequiresWith(t *testing.T) {
 	dir := emptyRepo(t)
 	sourceDir := newSource(t, sourceName, map[string]string{"modules/core.md": coreBody})
 
-	stdout, _, err := run(t, "init", "--source", sourceDir)
+	stdout, _, err := run(t, "init", sourceDir)
 
 	if err == nil {
-		t.Fatal("init --source with no --with returned a nil error")
+		t.Fatal("init with a source declaring no defaults and no --with returned a nil error")
 	}
-	const want = "--with is required with --source: name the modules to enable (its modules/*.md)"
-	if err.Error() != want {
-		t.Errorf("error = %q, want %q", err, want)
+	for _, want := range []string{sourceName, "--with", "source.yaml"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not mention %q", err, want)
+		}
 	}
 	if stdout != "" {
 		t.Errorf("init printed %q, want the failure on stderr alone", stdout)
@@ -77,15 +77,59 @@ func TestInitWithASourceRequiresWith(t *testing.T) {
 	}
 }
 
-// The help text must name the defaults, since they are what init uses when the
-// flag is absent.
-func TestInitHelpNamesTheDefaultModules(t *testing.T) {
-	stdout, _, err := run(t, "init", "--help")
-	if err != nil {
-		t.Fatalf("init --help: %v", err)
+// With a source that declares defaults, init needs nothing else.
+func TestInitWithASourceUsesItsDeclaredDefaults(t *testing.T) {
+	dir := emptyRepo(t)
+	sourceDir := newSource(t, sourceName, map[string]string{
+		"modules/core.md":       coreBody,
+		"modules/principles.md": principlesBody,
+		"source.yaml":           "defaults: [principles, core]\n",
+	})
+
+	if _, stderr, err := run(t, "init", sourceDir); err != nil {
+		t.Fatalf("init: %v (stderr %s)", err, stderr)
 	}
-	if !strings.Contains(stdout, "agents,module-authoring") {
-		t.Errorf("init --help does not name the default modules:\n%s", stdout)
+
+	written := readFile(t, filepath.Join(dir, manifest.FileName))
+	if want := "modules:\n  - principles\n  - core\n"; !strings.HasSuffix(written, want) {
+		t.Errorf("%s = %q, want it to end %q", manifest.FileName, written, want)
+	}
+}
+
+// A scheme-less host/path needs the network, so the CLI test stops at what
+// init would clone: a file:// URL stands for the remote, and its sha is pinned.
+func TestInitWithAGitURLPinsIt(t *testing.T) {
+	url, sha := gitFleet(t)
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	if _, stderr, err := run(t, "init", "file://"+url); err == nil {
+		t.Fatalf("init succeeded; the fixture declares no defaults (stderr %s)", stderr)
+	}
+	if _, stderr, err := run(t, "init", "file://"+url, "--with", "core"); err != nil {
+		t.Fatalf("init: %v (stderr %s)", err, stderr)
+	}
+	written := readFile(t, filepath.Join(dir, manifest.FileName))
+	for _, want := range []string{"name: bare", "git: file://" + url, "ref: " + sha} {
+		if !strings.Contains(written, want) {
+			t.Errorf("%s missing %q:\n%s", manifest.FileName, want, written)
+		}
+	}
+}
+
+// --source is gone: the source is the positional argument.
+func TestInitHasNoSourceFlag(t *testing.T) {
+	emptyRepo(t)
+	if _, _, err := run(t, "init", "--source", "x"); err == nil {
+		t.Fatal("init --source returned a nil error; the flag is removed")
+	}
+}
+
+// init takes at most one source.
+func TestInitTakesOneSource(t *testing.T) {
+	emptyRepo(t)
+	if _, _, err := run(t, "init", "a", "b"); err == nil {
+		t.Fatal("init with two sources returned a nil error")
 	}
 }
 
@@ -94,7 +138,7 @@ func TestInitWithADirectorySourceWritesAPathEntry(t *testing.T) {
 	dir := emptyRepo(t)
 	sourceDir := newSource(t, sourceName, map[string]string{"modules/core.md": coreBody})
 
-	if _, stderr, err := run(t, "init", "--source", sourceDir, "--with", "core"); err != nil {
+	if _, stderr, err := run(t, "init", sourceDir, "--with", "core"); err != nil {
 		t.Fatalf("init: %v (stderr %s)", err, stderr)
 	}
 
