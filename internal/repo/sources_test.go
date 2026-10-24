@@ -44,6 +44,7 @@ func git(t *testing.T, dir string, args ...string) string {
 	full := append([]string{"-c", "user.name=test", "-c", "user.email=test@example.com"}, args...)
 	cmd := exec.Command("git", full...)
 	cmd.Dir = dir
+	cmd.Env = source.GitEnv()
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git %s in %s: %v\n%s", strings.Join(args, " "), dir, err, out)

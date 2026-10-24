@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -273,8 +274,8 @@ func IsFullSha(ref string) bool {
 // runGit runs git in dir and returns its trimmed standard output. The user's
 // git configuration is deliberately left alone: credential helpers, SSH
 // aliases and url.insteadOf rewrites are how a private source is reachable at
-// all. Only the terminal prompt is suppressed, because the tool may run
-// without a terminal to answer it.
+// all. GitEnv suppresses the terminal prompt and drops the variables a git
+// hook sets for its own repository.
 func runGit(dir string, args ...string) (string, error) {
 	out, err := runGitOutput(dir, args...)
 	return strings.TrimSpace(string(out)), err
@@ -284,7 +285,7 @@ func runGit(dir string, args ...string) (string, error) {
 func runGitOutput(dir string, args ...string) ([]byte, error) {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	cmd.Env = GitEnv()
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
@@ -295,4 +296,31 @@ func runGitOutput(dir string, args ...string) ([]byte, error) {
 		return nil, fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, detail)
 	}
 	return stdout.Bytes(), nil
+}
+
+// repositoryEnv names the variables that point git at one particular
+// repository: the list `git rev-parse --local-env-vars` prints. A git hook
+// exports them for the repository it runs in.
+var repositoryEnv = []string{
+	"GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_CONFIG", "GIT_CONFIG_PARAMETERS",
+	"GIT_CONFIG_COUNT", "GIT_OBJECT_DIRECTORY", "GIT_DIR", "GIT_WORK_TREE",
+	"GIT_IMPLICIT_WORK_TREE", "GIT_GRAFT_FILE", "GIT_INDEX_FILE",
+	"GIT_NO_REPLACE_OBJECTS", "GIT_REPLACE_REF_BASE", "GIT_PREFIX",
+	"GIT_SHALLOW_FILE", "GIT_COMMON_DIR",
+}
+
+// GitEnv is the environment git runs in for a command aimed at a directory of
+// the caller's choosing: this process's environment without the variables
+// that point git at a repository, plus GIT_TERMINAL_PROMPT=0. Without it, a
+// command run from inside a git hook acts on the hook's repository and index
+// instead of the one in its working directory.
+func GitEnv() []string {
+	env := make([]string, 0, len(os.Environ())+1)
+	for _, entry := range os.Environ() {
+		name, _, _ := strings.Cut(entry, "=")
+		if !slices.Contains(repositoryEnv, name) {
+			env = append(env, entry)
+		}
+	}
+	return append(env, "GIT_TERMINAL_PROMPT=0")
 }
