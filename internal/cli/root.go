@@ -36,9 +36,11 @@ func Root() *cobra.Command {
 			"Modules come from the sources " + manifest.FileName + " names — a git URL or a local\n" +
 			"directory, each pinned by ref — or, when it names none, from the source built\n" +
 			"into the binary. Fetched sources are cached under $" + source.CacheEnv + ".",
+		Version:       version,
 		SilenceUsage:  true,
 		SilenceErrors: false,
 	}
+	root.SetVersionTemplate("{{.Name}} {{.Version}}\n")
 	root.AddCommand(initCmd(), addCmd(), removeCmd(), sourceCmd(), listCmd(), syncCmd(), updateCmd(), diffCmd(), statusCmd(), checkCmd())
 	return root
 }

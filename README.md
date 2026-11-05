@@ -7,8 +7,10 @@ Every repo has an `AGENTS.md` (or `CLAUDE.md`) telling coding agents how to work
 ## Install
 
 ```
-go install github.com/bensyverson/agents/cmd/agents@latest
+brew install bensyverson/tap/agents
 ```
+
+On macOS 15 or later with Apple silicon, that pours a prebuilt, signed binary; anywhere else Homebrew builds it from source with Go. Or, with Go, `go install github.com/bensyverson/agents/cmd/agents@latest`.
 
 ## Quick start
 
