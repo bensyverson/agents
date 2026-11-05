@@ -30,6 +30,8 @@ agents add stage-build go   # a stage and a stack on top
 agents update               # move the pin and see what the rules now say
 ```
 
+If the repo already has a `CLAUDE.md` of its own, `init` stops and asks you to run `agents migrate` first, which moves that file's text into `AGENTS.md` so nothing is lost.
+
 A repo that already exists takes a source with `agents source add github.com/bensyverson/agents-md`, then `agents add` for the modules it wants.
 
 ## Workflow

@@ -41,7 +41,7 @@ func Root() *cobra.Command {
 		SilenceErrors: false,
 	}
 	root.SetVersionTemplate("{{.Name}} {{.Version}}\n")
-	root.AddCommand(initCmd(), addCmd(), removeCmd(), sourceCmd(), listCmd(), syncCmd(), updateCmd(), diffCmd(), statusCmd(), checkCmd())
+	root.AddCommand(initCmd(), migrateCmd(), addCmd(), removeCmd(), sourceCmd(), listCmd(), syncCmd(), updateCmd(), diffCmd(), statusCmd(), checkCmd())
 	return root
 }
 

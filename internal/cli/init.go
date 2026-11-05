@@ -23,7 +23,9 @@ func initCmd() *cobra.Command {
 		Long: "Write " + manifest.FileName + ", render " + repo.AgentsFile + " (existing content becomes the\n" +
 			"project-owned head), create any file the chosen modules seed (" + repo.GotchasFile + "\n" +
 			"among them), link " + repo.ClaudeFile + ", and register the repo. Every step is\n" +
-			"skipped, not repeated, if it is already done.\n\n" +
+			"skipped, not repeated, if it is already done. A " + repo.ClaudeFile + " that is a file of\n" +
+			"its own, or a link anywhere but " + repo.AgentsFile + ", is refused before anything is\n" +
+			"written; `agents migrate` adopts the file.\n\n" +
 			"source is where the modules come from: a directory that exists is a path\n" +
 			"source, a host/path such as github.com/owner/repo is fetched over HTTPS, and\n" +
 			"anything else is handed to git as typed. The source is named after its last\n" +
@@ -99,8 +101,6 @@ func printInit(out io.Writer, res repo.InitResult) {
 		fmt.Fprintln(out, "linked "+link)
 	case repo.LinkAlready:
 		fmt.Fprintln(out, "already linked "+link)
-	case repo.LinkForeign:
-		fmt.Fprintln(out, repo.ClaudeFile+" is not a link to "+repo.AgentsFile+"; left alone")
 	}
 
 	fmt.Fprintln(out, did(res.Registered, "registered in "+res.RegistryPath, "already registered in "+res.RegistryPath))

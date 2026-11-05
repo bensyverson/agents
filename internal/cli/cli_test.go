@@ -283,7 +283,7 @@ func TestRootListsTheVerbs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("--help: %v", err)
 	}
-	for _, verb := range []string{"init", "sync", "diff", "status", "add", "remove", "list"} {
+	for _, verb := range []string{"init", "migrate", "sync", "diff", "status", "add", "remove", "list"} {
 		if !strings.Contains(stdout, verb) {
 			t.Errorf("--help does not list %q:\n%s", verb, stdout)
 		}

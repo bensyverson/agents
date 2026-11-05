@@ -46,9 +46,6 @@ const (
 	LinkCreated LinkResult = iota
 	// LinkAlready means it was already that symlink.
 	LinkAlready
-	// LinkForeign means CLAUDE.md exists and is something else; init left it
-	// alone rather than clobber a real file.
-	LinkForeign
 )
 
 func (l LinkResult) String() string {
@@ -57,8 +54,6 @@ func (l LinkResult) String() string {
 		return "created"
 	case LinkAlready:
 		return "already linked"
-	case LinkForeign:
-		return "left alone"
 	default:
 		return fmt.Sprintf("LinkResult(%d)", int(l))
 	}
@@ -135,6 +130,12 @@ func sourceNames(sources []manifest.Source) string {
 // so pruning stays a human step.
 func Init(dir string, opts InitOptions) (InitResult, error) {
 	res := InitResult{Dir: dir, RegistryPath: opts.RegistryPath}
+
+	// A CLAUDE.md of the project's own would be read instead of the rules
+	// rendered here, so init refuses it before writing anything.
+	if err := claudeReady(dir); err != nil {
+		return res, err
+	}
 
 	// A manifest the repo already has wins: init never edits one a human
 	// curated, and says so rather than rewriting it.
@@ -320,30 +321,25 @@ func seedHead(dir string, templates fs.FS) (bool, error) {
 	return true, nil
 }
 
-// linkClaude points CLAUDE.md at AGENTS.md with a relative symlink so the two
-// files can never drift, and refuses to touch anything else living there.
+// linkClaude points CLAUDE.md at AGENTS.md with a relative symlink. Init has
+// already refused any other CLAUDE.md, so one appearing since is an error.
 func linkClaude(dir string) (LinkResult, error) {
-	path := filepath.Join(dir, ClaudeFile)
-	info, err := os.Lstat(path)
-	switch {
-	case errors.Is(err, fs.ErrNotExist):
+	kind, target, err := inspectClaude(dir)
+	if err != nil {
+		return LinkCreated, err
+	}
+	switch kind {
+	case ClaudeLinked:
+		return LinkAlready, nil
+	case ClaudeAbsent:
+		path := filepath.Join(dir, ClaudeFile)
 		if err := os.Symlink(AgentsFile, path); err != nil {
-			return LinkForeign, fmt.Errorf("linking %s: %w", path, err)
+			return LinkCreated, fmt.Errorf("linking %s: %w", path, err)
 		}
 		return LinkCreated, nil
-	case err != nil:
-		return LinkForeign, fmt.Errorf("inspecting %s: %w", path, err)
+	default:
+		return LinkCreated, &ClaudeFileError{Dir: dir, Kind: kind, Target: target}
 	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		target, err := os.Readlink(path)
-		if err != nil {
-			return LinkForeign, fmt.Errorf("reading link %s: %w", path, err)
-		}
-		if filepath.Clean(target) == AgentsFile {
-			return LinkAlready, nil
-		}
-	}
-	return LinkForeign, nil
 }
 
 // register records the repo under its absolute path, so `--all` works from

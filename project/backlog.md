@@ -57,3 +57,11 @@ delta runs `agents check` through `.pre-commit-config.yaml`, but `agents status`
 **Why it's parked.** The harness-agnostic ruling stands: `AGENTS.md` and its files are read by every coding harness, and a skill format is one vendor's. It is also nearly free to add later — a file module with `when:` already has the skill shape, a situation and a body, so this is a rendering option rather than a format change.
 
 **What would un-park it.** A harness whose skill mechanism demonstrably beats the index table in practice, or a second harness converging on the same format so it stops being vendor-specific.
+
+## 2026-11-05 — `check` and `status` flag a `CLAUDE.md` that isn't the link
+
+**What.** `init` now refuses a `CLAUDE.md` of the project's own and points to `agents migrate`, but only `init` looks. A repo that was initialized before that change, with such a file left alone, still passes `sync`, `check` and `status`, while its harness reads `CLAUDE.md` and never the rendered rules. `check` and `status` could flag it.
+
+**Why it's parked.** The driving need was new projects set up from scratch, where `init` is the only command that matters, and `migrate` covers that.
+
+**What would un-park it.** A managed repo found with rules that never reached its harness, or a fleet-wide audit of existing repos.

@@ -1,6 +1,7 @@
 package repo
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -184,19 +185,55 @@ func TestInitKeepsIdenticalManifestBytes(t *testing.T) {
 	}
 }
 
-func TestInitLeavesForeignClaudeFile(t *testing.T) {
+// A CLAUDE.md of the project's own used to be left alone with a zero exit, so
+// Claude Code, which reads CLAUDE.md, never saw the rendered rules. Init now
+// refuses before writing anything and points to `agents migrate`.
+func TestInitRefusesAClaudeFileOfItsOwn(t *testing.T) {
 	const content = "# My own CLAUDE.md\n"
 	dir := newRepo(t, map[string]string{ClaudeFile: content})
 
-	res, err := Init(dir, initOptions(t, "core"))
-	if err != nil {
-		t.Fatalf("Init: %v", err)
+	_, err := Init(dir, initOptions(t, "core"))
+	var cerr *ClaudeFileError
+	if !errors.As(err, &cerr) || cerr.Kind != ClaudeOwnFile {
+		t.Fatalf("err = %v, want a ClaudeFileError of kind ClaudeOwnFile", err)
 	}
-	if res.Link != LinkForeign {
-		t.Errorf("Link = %v, want LinkForeign", res.Link)
+	if !strings.Contains(err.Error(), "agents migrate") {
+		t.Errorf("error %q does not point to `agents migrate`", err)
 	}
+	assertUntouched(t, dir)
 	if got := readFixture(t, dir, ClaudeFile); got != content {
 		t.Errorf("%s = %q, want it untouched", ClaudeFile, got)
+	}
+}
+
+func TestInitRefusesAClaudeLinkElsewhere(t *testing.T) {
+	shared := filepath.Join(t.TempDir(), "rules.md")
+	if err := os.WriteFile(shared, []byte("# Shared\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := os.Symlink(shared, filepath.Join(dir, ClaudeFile)); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Init(dir, initOptions(t, "core"))
+	var cerr *ClaudeFileError
+	if !errors.As(err, &cerr) || cerr.Kind != ClaudeLinkedElsewhere {
+		t.Fatalf("err = %v, want a ClaudeFileError of kind ClaudeLinkedElsewhere", err)
+	}
+	if strings.Contains(err.Error(), "agents migrate") {
+		t.Errorf("error %q points to `agents migrate`, which refuses this case too", err)
+	}
+	assertUntouched(t, dir)
+}
+
+// assertUntouched fails if init wrote its manifest or AGENTS.md.
+func assertUntouched(t *testing.T, dir string) {
+	t.Helper()
+	for _, name := range []string{manifest.FileName, AgentsFile} {
+		if _, err := os.Lstat(filepath.Join(dir, name)); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("%s exists after a refused init", name)
+		}
 	}
 }
 
