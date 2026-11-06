@@ -57,12 +57,16 @@ type UpdateResult struct {
 	// Updated is one entry per source whose ref changed, in manifest order.
 	// Empty means the manifest was not touched and nothing was rendered.
 	Updated []SourceUpdate
+	// Gitignore and Hook are what applying the modules' declarations did.
+	Gitignore GitignoreResult
+	Hook      HookResult
 	// Sync is the render that followed; the zero value when nothing moved.
 	Sync SyncResult
 }
 
 // Update moves each selected git source's pin to the commit its ref names now,
-// records what changed in the rules, rewrites the manifest and re-renders.
+// records what changed in the rules, rewrites the manifest, re-renders, and
+// re-applies the modules' ignore lines and pre-commit hook.
 //
 // It is the one verb that moves a ref: `sync` fetches a source the cache lacks
 // and otherwise renders whatever the manifest pins (Decision 8), so the model's
@@ -113,7 +117,11 @@ func (r *Repo) Update(opts Options, up UpdateOptions) (UpdateResult, error) {
 		return res, err
 	}
 	pinned.Seeds = r.Seeds
-	res.Sync, err = pinned.Sync(false)
+	if res.Sync, err = pinned.Sync(false); err != nil {
+		return res, err
+	}
+	// A pin that moved may bring new ignore lines or hook commands.
+	res.Gitignore, res.Hook, err = pinned.applyDeclared()
 	return res, err
 }
 

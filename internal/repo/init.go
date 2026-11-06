@@ -75,6 +75,9 @@ type InitResult struct {
 	// Registered is false when the repo was already in the registry.
 	Registered   bool
 	RegistryPath string
+	// Gitignore and Hook are what applying the modules' declarations did.
+	Gitignore GitignoreResult
+	Hook      HookResult
 	// Source is the source the manifest names, with a git ref resolved to the
 	// sha it was pinned at. The zero value means the embedded source.
 	Source manifest.Source
@@ -216,6 +219,10 @@ func Init(dir string, opts InitOptions) (InitResult, error) {
 	// The render and the seeds are one step: Sync creates whatever the
 	// manifest's modules declare and this repo does not have yet.
 	if res.Sync, err = r.Sync(false); err != nil {
+		return res, err
+	}
+
+	if res.Gitignore, res.Hook, err = r.applyDeclared(); err != nil {
 		return res, err
 	}
 

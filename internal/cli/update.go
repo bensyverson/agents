@@ -27,7 +27,9 @@ func updateCmd() *cobra.Command {
 			"arguments — resolve --ref, or the remote's default branch, to a commit, and pin\n" +
 			"it in " + manifest.FileName + ". A source that moves prints one header line,\n" +
 			"`<source>: <old> -> <new>`, then a diff of every module this repo enables whose\n" +
-			"body changed, and the regions are re-rendered from the new commit.\n\n" +
+			"body changed, and the regions are re-rendered from the new commit. The ignore\n" +
+			"lines and pre-commit hook the modules declare are re-applied, as `agents\n" +
+			"gitignore` and `agents hooks install` would, with a diff of the hook.\n\n" +
 			"This is the only verb that moves a ref: `agents sync` renders whatever the\n" +
 			"manifest pins, so the rules never change without the diff above. A source\n" +
 			"already at that commit prints nothing; a path source and the source built into\n" +
@@ -69,6 +71,13 @@ func updateCmd() *cobra.Command {
 				}
 				for _, path := range res.Sync.Seeded {
 					fmt.Fprintln(out, prefixed(all, r.Dir, "seeded "+path))
+				}
+				printGitignore(out, res.Gitignore, repo.ApplyWrite, all, r.Dir)
+				printHook(out, res.Hook, repo.ApplyWrite, all, r.Dir)
+				if res.Hook.State == repo.HookWritten {
+					// The hook is the commit gate, so a change to it gets a
+					// diff, as a change to the rules does.
+					fmt.Fprint(out, res.Hook.Diff())
 				}
 				return nil
 			})

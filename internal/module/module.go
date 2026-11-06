@@ -29,6 +29,14 @@ type Module struct {
 	// Each is created from templates/<seed> when it is missing, and never
 	// overwritten: once it exists it is the repo's own. Valid on any kind.
 	Seeds []string
+	// Ignore are lines the module wants in the .gitignore beside the
+	// manifest — `agents gitignore` appends any that are missing. The tool
+	// gives them no meaning of its own.
+	Ignore []string
+	// PreCommit are shell commands the module wants the repo's pre-commit
+	// hook to run — `agents hooks install` writes them, in module order,
+	// ahead of `agents check`. The tool gives them no meaning of its own.
+	PreCommit []string
 	// Body is the markdown with any leading frontmatter removed. It always ends in "\n".
 	Body string
 	// Hash is the first 6 hex of SHA-256 over Body.

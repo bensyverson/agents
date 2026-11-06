@@ -22,7 +22,9 @@ func initCmd() *cobra.Command {
 		Short: "Make the current directory a managed repo",
 		Long: "Write " + manifest.FileName + ", render " + repo.AgentsFile + " (existing content becomes the\n" +
 			"project-owned head), create any file the chosen modules seed (" + repo.GotchasFile + "\n" +
-			"among them), link " + repo.ClaudeFile + ", and register the repo. Every step is\n" +
+			"among them), add the ignore lines they declare to " + repo.GitignoreFile + ", install the\n" +
+			"pre-commit hook they compose (leaving one agents did not write alone), link\n" +
+			repo.ClaudeFile + ", and register the repo. Every step is\n" +
 			"skipped, not repeated, if it is already done. A " + repo.ClaudeFile + " that is a file of\n" +
 			"its own, or a link anywhere but " + repo.AgentsFile + ", is refused before anything is\n" +
 			"written; `agents migrate` adopts the file.\n\n" +
@@ -94,6 +96,11 @@ func printInit(out io.Writer, res repo.InitResult) {
 	for _, path := range res.Sync.Seeded {
 		fmt.Fprintln(out, "seeded "+path)
 	}
+	printGitignore(out, res.Gitignore, repo.ApplyWrite, false, res.Dir)
+	if res.Hook.State == repo.HookFresh {
+		fmt.Fprintln(out, "already installed "+relTo(res.Dir, res.Hook.Path))
+	}
+	printHook(out, res.Hook, repo.ApplyWrite, false, res.Dir)
 
 	link := repo.ClaudeFile + " -> " + repo.AgentsFile
 	switch res.Link {

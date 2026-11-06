@@ -38,6 +38,8 @@ var (
 	ErrReservedName            = errors.New("name is reserved for the generated index region")
 	ErrEmptyBody               = errors.New("module has no body")
 	ErrSeedPathInvalid         = errors.New("seed path must be relative to the repo")
+	ErrIgnoreInvalid           = errors.New("ignore entry must be one non-comment line")
+	ErrPreCommitInvalid        = errors.New("pre-commit entry must be one non-comment line")
 )
 
 // String renders a Kind as it is written in frontmatter.
@@ -60,6 +62,9 @@ type frontmatter struct {
 	Path  string   `yaml:"path"`
 	When  string   `yaml:"when"`
 	Seeds []string `yaml:"seeds"`
+	// Ignore and PreCommit are handed on verbatim; see Module.
+	Ignore    []string `yaml:"ignore"`
+	PreCommit []string `yaml:"pre-commit"`
 }
 
 // Parse splits a module file into its optional leading frontmatter and its
@@ -156,7 +161,40 @@ func parseFrontmatter(front string) (Module, error) {
 	if err != nil {
 		return Module{}, err
 	}
-	return Module{Kind: kind, When: fm.When, Seeds: seeds}, nil
+	ignore, err := cleanLines(fm.Ignore, ErrIgnoreInvalid)
+	if err != nil {
+		return Module{}, err
+	}
+	preCommit, err := cleanLines(fm.PreCommit, ErrPreCommitInvalid)
+	if err != nil {
+		return Module{}, err
+	}
+	return Module{Kind: kind, When: fm.When, Seeds: seeds, Ignore: ignore, PreCommit: preCommit}, nil
+}
+
+// cleanLines trims each declared line and refuses one that is empty, spans
+// several lines or is a # comment. Each lands as exactly one line of a file the
+// tool appends to or rewrites, so a stray newline would forge a line the module
+// never declared, and a comment would either ignore nothing or pass for one of
+// the hook's own markers.
+func cleanLines(lines []string, invalid error) ([]string, error) {
+	if len(lines) == 0 {
+		return nil, nil
+	}
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case trimmed == "":
+			return nil, fmt.Errorf("%w: entry is empty", invalid)
+		case strings.ContainsAny(trimmed, "\r\n"):
+			return nil, fmt.Errorf("%w: %q spans several lines", invalid, line)
+		case strings.HasPrefix(trimmed, "#"):
+			return nil, fmt.Errorf("%w: %q is a comment", invalid, line)
+		}
+		out = append(out, trimmed)
+	}
+	return out, nil
 }
 
 // cleanSeeds normalises each declared seed and refuses any that would write

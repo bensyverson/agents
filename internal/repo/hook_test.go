@@ -22,9 +22,6 @@ func wantHint(t *testing.T, dir, wantPath string) string {
 	if !strings.Contains(hint, wantPath) {
 		t.Errorf("hint %q does not name %s", hint, wantPath)
 	}
-	if !strings.Contains(hint, hookLine) {
-		t.Errorf("hint %q does not carry the line to paste (%q)", hint, hookLine)
-	}
 	if strings.Contains(strings.TrimSuffix(hint, "\n"), "\n") {
 		t.Errorf("hint is more than one line:\n%s", hint)
 	}
@@ -33,7 +30,10 @@ func wantHint(t *testing.T, dir, wantPath string) string {
 
 func TestHookHintWhenHookDoesNotCallCheck(t *testing.T) {
 	dir := newRepo(t, map[string]string{".git/hooks/pre-commit": hookWithout})
-	wantHint(t, dir, filepath.Join(dir, ".git", "hooks", "pre-commit"))
+	hint := wantHint(t, dir, filepath.Join(dir, ".git", "hooks", "pre-commit"))
+	if !strings.Contains(hint, hookLine) {
+		t.Errorf("hint %q does not carry the line to paste (%q)", hint, hookLine)
+	}
 }
 
 func TestHookHintSilentWhenHookCallsCheck(t *testing.T) {
@@ -58,6 +58,9 @@ func TestHookHintWhenThereIsNoHook(t *testing.T) {
 	hint := wantHint(t, dir, filepath.Join(dir, ".git", "hooks", "pre-commit"))
 	if !strings.Contains(hint, "no pre-commit hook") {
 		t.Errorf("hint %q does not say the hook is absent", hint)
+	}
+	if !strings.Contains(hint, "agents hooks install") {
+		t.Errorf("hint %q does not name the verb that writes one", hint)
 	}
 }
 

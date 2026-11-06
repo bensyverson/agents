@@ -39,8 +39,8 @@ const (
 // ok is true when there is something to say: the hook exists but never calls
 // `agents check`, or there is no hook at all. It is false when the hook
 // already calls the verb — and when dir is not a git repo, where there is no
-// hook to talk about. The tool never writes a consumer's hook; this is the
-// whole of its involvement.
+// hook to talk about. A hook the project wrote gets the line to paste rather
+// than the verb, which would replace it.
 func HookHint(dir string) (string, bool) {
 	git, ok := gitDir(dir)
 	if !ok {
@@ -53,8 +53,8 @@ func HookHint(dir string) (string, bool) {
 		// An unreadable hook is not the user's problem to solve here.
 		return "", false
 	case !exists:
-		return "no pre-commit hook at " + path + " — one line, `" + hookLine +
-			"`, keeps this repo's AGENTS.md from going stale", true
+		return "no pre-commit hook at " + path + " — `agents hooks install` writes one that runs `" +
+			hookCall + "`, keeping this repo's AGENTS.md from going stale", true
 	case strings.Contains(body, hookCall):
 		return "", false
 	}
