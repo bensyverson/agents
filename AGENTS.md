@@ -14,7 +14,7 @@ You are working on `agents`, a small Go CLI that renders shared house rules — 
 
 This file is itself rendered from those modules by the tool (`agents sync` here must always be a no-op) — the regions below are what every managed repo receives.
 
-<!-- agents:begin core@bb8246 -->
+<!-- agents:begin core@3cc73e -->
 ## Working rules
 
 **Understand the why.** If the goal behind a request isn't clear, ask before solving — beware the XY problem.
@@ -32,6 +32,8 @@ This file is itself rendered from those modules by the tool (`agents sync` here 
 **Don't tour the codebase.** Start from the README and the docs (an Explore agent is fine); dig only where the task leads — once you have a specific need, read as much as that need requires.
 
 **Scripts.** Analysis tooling goes in `scripts/` so it can be re-run — check there before writing one.
+
+**Shell variables.** Never store a command or a list of arguments in a plain shell variable. zsh doesn't split `$VAR` into words, so `git commit -- $FILES` passes one path made of every name. Use a function or an array, or write it out. This applies on remote machines too.
 
 **Critique before declaring done.** Re-read the original request: is the need actually met? Do lint and tests pass? Are docs updated? What would an expert flag? Fix serious flaws before reporting.
 
@@ -51,7 +53,7 @@ This file is itself rendered from those modules by the tool (`agents sync` here 
 - **On the main thread, read `project/agents/delegation.md` in full before you begin, so whether to delegate is a choice, not a default.** A subagent skips this: its brief is its scope, and it doesn’t delegate further.
 - **Unless the user says they're around, assume they aren't.** Make the call yourself when it's safe and a two-way door, queue the rest, and report every decision at the end. While they're around, bring questions as they come up, including ones an agent raises mid-flight.
 - **Before starting, say what needs the user's eyes.**
-- **Keep working while there's work; once past your context line, start nothing new.** The main thread's line is 25%, a subagent's 40% (read with contextfill; never estimate). The line is where wrapping up begins: finishing what's in flight and handing off happen after it, however far past it that takes. A delegating main thread: delegation.md ▸ Carving the work.
+- **Keep working while there's work; once past your context line, start nothing new.** The main thread's line is 33%, a subagent's 40% (read with contextfill; never estimate). Those are defaults: when the contextfill hook names a line, its line wins. The line is where wrapping up begins: finishing what's in flight and handing off happen after it, however far past it that takes. It is not a cutoff, so until you reach it, keep taking on work; don't start wrapping up early. A delegating main thread: delegation.md ▸ Carving the work.
 
 ## Git
 
@@ -89,10 +91,10 @@ Defaults, not laws. When we break one, we do it consciously and say so in the re
 Pre-launch, zero users, no existing data. Never spend effort on backward compatibility — assume every use is green-field — but flag breaking changes and update the affected tests. Be ambitious: if a feature is important, build it fully now rather than an MVP; balance that against over-engineering and future-proofing.
 <!-- agents:end stage-build -->
 
-<!-- agents:begin go@91ab6a -->
+<!-- agents:begin go@4864fc -->
 ## Go
 
-- Before committing: `go fix ./...`, `gofmt -w .`, `go vet ./...` and `go mod tidy`, then the tests you touched. `go fix` converges over several passes — "re-run to apply more" is progress, not failure; re-run until clean before editing code.
+- Before committing: `go fix ./...`, `gofmt -w .`, `go vet ./...` and `go mod tidy`, then the tests you touched. `go fix` converges over several passes — "re-run to apply more" is progress, not failure; re-run until clean before editing code. The pre-commit hook `agents hooks install` writes checks all four without rewriting anything, then runs the tests.
 - **Run `go fix ./...` before staging, not just before committing.** A pre-commit hook that re-stages `gofmt` rewrites will not re-stage `go fix` rewrites: a file `go fix` changed that is already gofmt-clean commits unfixed, and your working tree quietly diverges from what you committed.
 - **Tests that share a database need `-p 1` and a database per agent.** `go test ./...` runs packages in parallel, so packages that seed the same fixtures and truncate the same tables produce a wall of unrelated-looking failures that survives a re-run and reads as a real regression.
 - **Schema changes are numbered migrations** in the project's migrations directory (the head names it). Never run one by hand — the binary migrates when it starts or opens the database and records the version; the next run applies it. Read the full note history on the task (`job show <id>`) before writing schema; it is the most expensive thing to change.
